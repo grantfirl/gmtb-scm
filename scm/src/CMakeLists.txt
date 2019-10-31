@@ -3,9 +3,9 @@ PROJECT(scm)
 set(PROJECT "CCPP-SCM")
 ENABLE_LANGUAGE(Fortran)
 
-include(CMakeForceCompiler)
+#include(CMakeForceCompiler)
 
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake/modules)
+#SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_SOURCE_DIR}/cmake/modules)
 
 IF(DEFINED ENV{NETCDF})
   MESSAGE("The NETCDF env. variable is $ENV{NETCDF}")
@@ -25,10 +25,11 @@ set(BACIO_LIB4   ${NCEPLIBS_DIR}/lib/libbacio_4.a)
 set(SP_LIBd      ${NCEPLIBS_DIR}/lib/libsp_v2.0.2_d.a)
 set(W3NCO_LIBd   ${NCEPLIBS_DIR}/lib/libw3nco_d.a)
 
-set(STATIC false)
-
-SET(CCPP_SRC ${CMAKE_SOURCE_DIR}/../../ccpp/framework)
-SET(GFSPHYSICS_SRC ${CMAKE_SOURCE_DIR}/../../ccpp/physics)
+SET(ROOTDIR ${CMAKE_CURRENT_SOURCE_DIR}/../../)
+SET(CCPP_ROOTDIR ${ROOTDIR}ccpp/)
+SET(CCPP_FRAMEWORK_SRC ${CCPP_ROOTDIR}framework)
+SET(CCPP_PHYSICS_SRC ${CCPP_ROOTDIR}physics)
+SET(CCPP_CONFOPT --config=ccpp/config/ccpp_prebuild_config.py)
 
 # Use rpaths on MacOSX
 set(CMAKE_MACOSX_RPATH 1)
@@ -38,14 +39,14 @@ set(CMAKE_MACOSX_RPATH 1)
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     message(STATUS "Setting build type to 'Release' as none was specified.")
     set(CMAKE_BUILD_TYPE Release CACHE STRING "Choose the type of build." FORCE)
-
+    
     # Set the possible values of build type for cmake-gui
     set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "Debug" "Release"
                  "MinSizeRel" "RelWithDebInfo")
 endif()
 
-INCLUDE_DIRECTORIES(${CMAKE_BINARY_DIR}/ccpp/framework/src)
-INCLUDE_DIRECTORIES(${CMAKE_BINARY_DIR}/ccpp/physics)
+#INCLUDE_DIRECTORIES(${CMAKE_BINARY_DIR}/ccpp/framework/src)
+#INCLUDE_DIRECTORIES(${CMAKE_BINARY_DIR}/ccpp/physics)
 
 #------------------------------------------------------------------------------
 # Add required preprocessor flags for build type
@@ -80,6 +81,8 @@ endif()
 #------------------------------------------------------------------------------
 # Set compile options
 if (${CMAKE_BUILD_TYPE} MATCHES "Debug")
+  SET(CCPP_CONFOPT ${CCPP_CONFOPT} "--debug")
+  #SET(CCPP_DEBUG "--debug" CACHE STRING "" FORCE)
   # Basic settings
   #if CFLAGS, CXX_FLAGS, or FFLAGS are defined via environment variables, use them
   if (DEFINED ENV{CFLAGS})
@@ -216,8 +219,8 @@ endif()
 
 #------------------------------------------------------------------------------
 # Configure sources
-ADD_SUBDIRECTORY(${CCPP_SRC} ${CMAKE_BINARY_DIR}/ccpp/framework)
-ADD_SUBDIRECTORY(${GFSPHYSICS_SRC} ${CMAKE_BINARY_DIR}/ccpp/physics)
+#ADD_SUBDIRECTORY(${CCPP_FRAMEWORK_SRC} ${CMAKE_BINARY_DIR}/ccpp/framework)
+#ADD_SUBDIRECTORY(${CCPP_PHYSICS_SRC} ${CMAKE_BINARY_DIR}/ccpp/physics)
 SET(scm_source_files gmtb_scm.F90
             gmtb_scm_input.f90
             gmtb_scm_utils.f90
@@ -230,9 +233,26 @@ SET(scm_source_files gmtb_scm.F90
             gmtb_scm_physical_constants.f90
             gmtb_scm_type_defs.f90
 )
+if (STATIC)
+  ADD_DEFINITIONS(-DSTATIC)
+  set(CCPP_CONFOPT ${CCPP_CONFOPT} "--static")
+  set(CCPP_CONFOPT ${CCPP_CONFOPT} "--suites" "SCM_GFS_v16")
+  #set(CCPP_SUITES "--suites" "SCM_GFS_v15")
+endif (STATIC)
+
+set( ENV{PATH_CCPP} ${CCPP_ROOTDIR} )
+#set (EXECUTE_COMMAND ./ccpp/framework/scripts/ccpp_prebuild.py ${CCPP_CONFOPT} ${CCPP_DEBUG} ${CCPP_STATIC} ${CCPP_SUITES})
+set (EXECUTE_COMMAND ./ccpp/framework/scripts/ccpp_prebuild.py ${CCPP_CONFOPT})
+execute_process(COMMAND ${EXECUTE_COMMAND}
+                        WORKING_DIRECTORY ${ROOTDIR}
+                        RESULT_VARIABLE exit_code
+)
+if (NOT exit_code EQUAL "0")
+   message (FATAL_ERROR "CCPP Prebuild did not complete successfully.")
+endif (NOT exit_code EQUAL "0")
 
 ADD_EXECUTABLE(gmtb_scm ${scm_source_files})
-TARGET_LINK_LIBRARIES(gmtb_scm ccppphys ccpp)
+#TARGET_LINK_LIBRARIES(gmtb_scm ccppphys ccpp)
 set_target_properties(gmtb_scm PROPERTIES
                                COMPILE_FLAGS "${CMAKE_Fortran_FLAGS}"
                                LINK_FLAGS "${CMAKE_Fortran_FLAGS}")
@@ -248,3 +268,7 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E create_symlink
                 ${CMAKE_SOURCE_DIR}/multi_run_gmtb_scm.py
                 ${CMAKE_CURRENT_BINARY_DIR}/multi_run_gmtb_scm.py)
+                
+
+
+#add_dependencies(gmtb_scm ccpp_prebuild)
