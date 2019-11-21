@@ -293,9 +293,24 @@ subroutine gmtb_scm_main_sub()
       scm_state%temp_u = scm_state%state_u
       scm_state%temp_v = scm_state%state_v
     end if
-
+    
+    
+    if(scm_state%lagrangian_vert) then
+      if (scm_state%mom_forcing_type >= 2 .or. scm_state%thermo_forcing_type >=2) then
+        !interpolate the vertical velocity (omega) to the current pressure on model layers
+        call interpolate_omega(scm_input, scm_state)
+        !since Lagrangian surfaces are "material", move them according to the specified omega values
+        call apply_omega(scm_state)
+      end if
+      !interpolate pres_surf in time
+      !save old pres_l for remapping
+      !calculate new pressure levels pres_surf, ak, bk => calc_pres_exner_geopotential
+      !remap T, q, u, v (and other vars?) to new pressure levels (using saved pres_l); this "applies" vertical advective tendencies and accounts for changing total column mass
+    endif
+    
     call interpolate_forcing(scm_input, scm_state)
-
+    
+    !no longer need to call this here since done above
     call calc_pres_exner_geopotential(1, scm_state)
 
     !zero out diagnostics output on EVERY time step - breaks diagnostics averaged over many timesteps

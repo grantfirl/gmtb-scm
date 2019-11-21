@@ -266,6 +266,79 @@ subroutine interpolate_forcing(scm_input, scm_state)
   !> @}
 end subroutine interpolate_forcing
 
+subroutine interpolate_omega(scm_input, scm_state)
+  use gmtb_scm_type_defs, only: scm_input_type, scm_state_type
+
+  type(scm_input_type), intent(in) :: scm_input
+  type(scm_state_type), intent(inout) :: scm_state
+  
+  integer :: i, n
+  integer :: low_t_index, top_index !< index of the time in the input file immediately before the current model time, index of the last calculated level
+  real(kind=dp) :: lifrac
+
+  real(kind=dp) :: omega_bracket(2,scm_state%n_levels) !< forcing terms that "bracket" around the model time
+  
+  !> - Check for the case where the elapsed model time extends beyond the supplied forcing.
+  if(scm_state%model_time >= scm_input%input_time(scm_input%input_ntimes)) then
+    
+    do i=1, scm_state%n_cols
+      call interpolate_to_grid_centers(scm_input%input_nlev, scm_input%input_pres, &
+        scm_input%input_omega(scm_input%input_ntimes,:), scm_state%pres_l(i,1,:), scm_state%n_levels, &
+        omega_bracket(1,:), top_index, 3)
+      
+      if (top_index < scm_state%n_levels .AND. top_index.GT.0) then
+        w_ls_bracket(1,top_index+1:scm_state%n_levels) = 0.0!w_ls_bracket(1,top_index)
+        omega_bracket(1,top_index+1:scm_state%n_levels) = 0.0!omega_bracket(1,top_index)
+      end if
+      
+      scm_state%omega(i,1,:) = omega_bracket(1,:)
+    end do
+  else
+    low_t_index = 0
+    do n=1, scm_input%input_ntimes
+      if (scm_input%input_time(n) > scm_state%model_time) then
+        low_t_index = n-1
+        lifrac = (scm_state%model_time - scm_input%input_time(low_t_index))/&
+          (scm_input%input_time(low_t_index+1) - scm_input%input_time(low_t_index))
+        exit
+      end if
+    end do
+    
+    do i=1, scm_state%n_cols
+      call interpolate_to_grid_centers(scm_input%input_nlev, scm_input%input_pres, scm_input%input_omega(low_t_index,:), &
+        scm_state%pres_l(i,1,:), scm_state%n_levels, omega_bracket(1,:), top_index, 3)
+      call interpolate_to_grid_centers(scm_input%input_nlev, scm_input%input_pres, scm_input%input_omega(low_t_index+1,:), &
+        scm_state%pres_l(i,1,:), scm_state%n_levels, omega_bracket(2,:), top_index, 3)
+        
+      if (top_index < scm_state%n_levels) then
+        omega_bracket(1,top_index+1:scm_state%n_levels) = 0.0!omega_bracket(1,top_index)
+        omega_bracket(2,top_index+1:scm_state%n_levels) = 0.0!omega_bracket(2,top_index)
+      end if
+      
+      scm_state%omega(i,1,:) = (1.0 - lifrac)*omega_bracket(1,:) + lifrac*omega_bracket(2,:)
+    end do
+  end if
+  
+end subroutine interpolate_omega
+
+subroutine apply_omega(scm_state)
+  use gmtb_scm_type_defs, only: scm_state_type
+
+  type(scm_state_type), intent(inout) :: scm_state
+  
+  integer :: i, k
+  
+  do i=1, scm_state%n_cols
+    do k=1, scm_state%n_levels
+      scm_state%pres_l(i,1,k) = scm_state%pres_l(i,1,k) + scm_state%omega(i,1,k)*scm_state%dt
+    end do
+  end do
+  
+  !TODO check for monotonicity in pres_l after applying omega; it might be possible for one pressure level to bypass another 
+  !     since no checks on the values of omega have been done
+  
+end subroutine apply_omega
+
 !> This subroutine updates the state variables due to the model forcing using the leapfrog time integration scheme.
 !! It overwrites the state variable arrays where the filtered values from the previous time step are kept. These parts of the state
 !! variable arrays are pointed to by the state_fields_in DDT and are later updated by calling nuopc_phys_run.

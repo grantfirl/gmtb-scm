@@ -86,6 +86,7 @@ module gmtb_scm_type_defs
     integer                           :: reference_profile_choice !< 1: McClatchey profile, 2: mid-latitude summer standard atmosphere
     integer                           :: C_RES !< effective model resolution in cubed sphere resolution (needed for GWD)
     logical                           :: model_ics !<  true means have land info too
+    logical                           :: lagrangian_vert !< true means to use a Lagrangian vertical coordinate with remapping like for FV3
 
     real(kind=dp)                           :: model_time !< elapsed model time (s)
     real(kind=dp)                           :: dt !< physics time step (s)
@@ -420,6 +421,7 @@ module gmtb_scm_type_defs
     scm_state%mom_forcing_type = int_zero
     scm_state%thermo_forcing_type = int_zero
     scm_state%reference_profile_choice = int_zero
+    scm_state%lagrangian_vert = .false.
 
     scm_state%model_time = real_zero
     scm_state%dt = real_zero

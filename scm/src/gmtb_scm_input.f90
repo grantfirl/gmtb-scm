@@ -55,6 +55,7 @@ subroutine get_config_nml(scm_state)
   integer              :: reference_profile_choice !< 1: McClatchey profile, 2: mid-latitude summer standard atmosphere
   integer              :: year, month, day, hour
   real(kind=dp)        :: column_area
+  logical              :: lagrangian_vert
 
   character(len=80), allocatable  :: physics_suite(:) !< name of the physics suite name (currently only GFS_operational supported)
   character(len=64), allocatable   :: physics_nml(:)
@@ -65,7 +66,7 @@ subroutine get_config_nml(scm_state)
 
   NAMELIST /case_config/ model_name, n_columns, case_name, dt, time_scheme, runtime, output_frequency, &
     n_levels, output_dir, output_file, case_data_dir, vert_coord_data_dir, thermo_forcing_type, model_ics,C_RES,mom_forcing_type, relax_time, &
-    sfc_type, sfc_flux_spec, sfc_roughness_length_cm, reference_profile_choice, year, month, day, hour, column_area
+    sfc_type, sfc_flux_spec, sfc_roughness_length_cm, reference_profile_choice, year, month, day, hour, column_area, lagrangian_vert
     
   NAMELIST /physics_config/ physics_suite, physics_nml
 
@@ -100,6 +101,7 @@ subroutine get_config_nml(scm_state)
   month = 1
   day = 19
   hour = 3
+  lagrangian_vert = .false.
 
   open(unit=10, file=experiment_namelist, status='old', action='read', iostat=ioerror)
   if(ioerror /= 0) then
@@ -176,6 +178,7 @@ subroutine get_config_nml(scm_state)
   scm_state%model_ics = model_ics
   scm_state%reference_profile_choice = reference_profile_choice
   scm_state%relax_time = relax_time
+  scm_state%lagrangian_vert = lagrangian_vert
   
 !> @}
 end subroutine get_config_nml
