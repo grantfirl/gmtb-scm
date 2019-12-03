@@ -76,6 +76,7 @@ module gmtb_scm_type_defs
     integer                           :: tke_index !< index for TKE in the tracer array
     integer                           :: water_friendly_aerosol_index !< index for water-friendly aerosols in the tracer array
     integer                           :: ice_friendly_aerosol_index !< index for ice-friendly aerosols in the tracer array
+    integer                           :: mass_weighted_rime_factor_index !< index for mass-weighted rime factor
     integer                           :: init_year, init_month, init_day, init_hour
     character(len=32), allocatable    :: tracer_names(:) !< name of physics suite (must be "GFS_operational" for prototype)
     integer, allocatable              :: blksz(:)
@@ -375,7 +376,7 @@ module gmtb_scm_type_defs
     scm_state%n_cols = n_columns
     scm_state%n_timesteps = int_zero
     scm_state%n_time_levels = n_time_levels
-    scm_state%n_tracers = 16
+    scm_state%n_tracers = 17
     allocate(scm_state%tracer_names(scm_state%n_tracers))
     scm_state%water_vapor_index = 1
     scm_state%ozone_index = 2
@@ -393,6 +394,7 @@ module gmtb_scm_type_defs
     scm_state%tke_index = 14
     scm_state%water_friendly_aerosol_index = 15
     scm_state%ice_friendly_aerosol_index = 16
+    scm_state%mass_weighted_rime_factor_index = 17
     scm_state%tracer_names(1) = 'vap_wat'
     scm_state%tracer_names(2) = 'o3mr'
     scm_state%tracer_names(3) = 'liq_wat'
@@ -409,6 +411,7 @@ module gmtb_scm_type_defs
     scm_state%tracer_names(14)= 'sgs_tke'
     scm_state%tracer_names(15)= 'liq_aero'
     scm_state%tracer_names(16)= 'ice_aero'
+    scm_state%tracer_names(17)= 'q_rimef'
     scm_state%n_itt_swrad = int_zero
     scm_state%n_itt_lwrad = int_zero
     scm_state%n_itt_out = int_zero
@@ -656,8 +659,6 @@ module gmtb_scm_type_defs
       scm_input%input_T_nudge(ntimes, nlev), scm_input%input_thil_nudge(ntimes, nlev), scm_input%input_qt_nudge(ntimes, nlev))
     scm_input%input_pres_surf = real_zero
     scm_input%input_T_surf = real_zero
-    scm_input%input_pres_surf = real_zero
-    scm_input%input_T_surf = real_zero
     scm_input%input_lat = real_zero
     scm_input%input_lon = real_zero
     scm_input%input_vegsrc = int_zero
@@ -843,6 +844,8 @@ module gmtb_scm_type_defs
 
     physics%Sfcprop(col)%tsfc => scm_state%T_surf(col,:)
     physics%Sfcprop(col)%tref => scm_state%T_surf(col,:)
+    physics%Sfcprop(col)%tsfco => scm_state%T_surf(col,:)
+    physics%Sfcprop(col)%tisfc => scm_state%T_surf(col,:) !sea ice temperature is the same as SST for now?
     physics%Sfcprop(col)%slmsk => scm_state%sfc_type(col,:)
     physics%Sfcprop(col)%vtype => scm_state%veg_type(col,:)
     physics%Sfcprop(col)%vfrac => scm_state%veg_frac(col,:)
