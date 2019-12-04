@@ -103,6 +103,8 @@ module gmtb_scm_type_defs
     !!  - index order for state variables is (horizontal, vertical, timesteps);
     !!  - index order for tracer is (horizontal, vertical, tracer_index, timesteps)
     real(kind=dp), allocatable              :: pres_i(:,:,:), pres_l(:,:,:) !< pressure on grid interfaces, centers (Pa)
+    real(kind=dp), allocatable              :: pres_l_before_remap(:,:,:) !< pressure on grid centers before Lagrangian remapping (Pa)
+    real(kind=dp), allocatable              :: pres_i_before_remap(:,:,:) !< pressure on grid interfaces before Lagrangian remapping (Pa)
     real(kind=dp), allocatable              :: si(:,:,:), sl(:,:,:) !< sigma on grid interfaces, centers
     real(kind=dp), allocatable              :: exner_i(:,:,:), exner_l(:,:,:) !< exner function on grid interfaces, centers
     real(kind=dp), allocatable              :: geopotential_i(:,:,:), geopotential_l(:,:,:) !< geopotential on grid interfaces, centers
@@ -441,10 +443,13 @@ module gmtb_scm_type_defs
     scm_state%init_hour = int_zero
 
     allocate(scm_state%pres_l(n_columns, 1, n_levels), scm_state%pres_i(n_columns, 1, n_levels+1), &
+      scm_state%pres_l_before_remap(n_columns, 1, n_levels), scm_state%pres_i_before_remap(n_columns, 1, n_levels), &
       scm_state%exner_l(n_columns, 1, n_levels), scm_state%exner_i(n_columns, 1, n_levels+1), &
       scm_state%geopotential_l(n_columns, 1, n_levels), scm_state%geopotential_i(n_columns, 1, n_levels+1))
     scm_state%pres_l = real_zero
     scm_state%pres_i = real_zero
+    scm_state%pres_l_before_remap = real_zero
+    scm_state%pres_i_before_remap = real_zero
     scm_state%exner_l = real_zero
     scm_state%exner_i = real_zero
     scm_state%geopotential_l = real_zero

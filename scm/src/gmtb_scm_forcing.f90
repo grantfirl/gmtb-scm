@@ -287,7 +287,6 @@ subroutine interpolate_omega(scm_input, scm_state)
         omega_bracket(1,:), top_index, 3)
       
       if (top_index < scm_state%n_levels .AND. top_index.GT.0) then
-        w_ls_bracket(1,top_index+1:scm_state%n_levels) = 0.0!w_ls_bracket(1,top_index)
         omega_bracket(1,top_index+1:scm_state%n_levels) = 0.0!omega_bracket(1,top_index)
       end if
       
@@ -320,6 +319,40 @@ subroutine interpolate_omega(scm_input, scm_state)
   end if
   
 end subroutine interpolate_omega
+
+subroutine interpolate_surface_pressure_in_time(scm_input, scm_state)
+  use gmtb_scm_type_defs, only: scm_input_type, scm_state_type
+
+  type(scm_input_type), intent(in) :: scm_input
+  type(scm_state_type), intent(inout) :: scm_state
+  
+  integer :: i, n
+  integer :: low_t_index, top_index !< index of the time in the input file immediately before the current model time, index of the last calculated level
+  real(kind=dp) :: lifrac
+  
+  !> - Check for the case where the elapsed model time extends beyond the supplied forcing.
+  if(scm_state%model_time >= scm_input%input_time(scm_input%input_ntimes)) then
+    do i=1, scm_state%n_cols
+      scm_state%pres_surf(i,1) = scm_input%input_pres_surf(scm_input%input_ntimes)
+    end do
+  else
+    low_t_index = 0
+    do n=1, scm_input%input_ntimes
+      if (scm_input%input_time(n) > scm_state%model_time) then
+        low_t_index = n-1
+        lifrac = (scm_state%model_time - scm_input%input_time(low_t_index))/&
+          (scm_input%input_time(low_t_index+1) - scm_input%input_time(low_t_index))
+        exit
+      end if
+    end do
+    
+    do i=1, scm_state%n_cols
+      scm_state%pres_surf(i,1) = (1.0 - lifrac)*scm_input%input_pres_surf(low_t_index) + &
+        lifrac*scm_input%input_pres_surf(low_t_index+1)
+    end do
+  end if
+  
+end subroutine interpolate_surface_pressure_in_time
 
 subroutine apply_omega(scm_state)
   use gmtb_scm_type_defs, only: scm_state_type

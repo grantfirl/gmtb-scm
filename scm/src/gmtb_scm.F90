@@ -294,7 +294,6 @@ subroutine gmtb_scm_main_sub()
       scm_state%temp_v = scm_state%state_v
     end if
     
-    
     if(scm_state%lagrangian_vert) then
       if (scm_state%mom_forcing_type >= 2 .or. scm_state%thermo_forcing_type >=2) then
         !interpolate the vertical velocity (omega) to the current pressure on model layers
@@ -302,16 +301,36 @@ subroutine gmtb_scm_main_sub()
         !since Lagrangian surfaces are "material", move them according to the specified omega values
         call apply_omega(scm_state)
       end if
-      !interpolate pres_surf in time
       !save old pres_l for remapping
-      !calculate new pressure levels pres_surf, ak, bk => calc_pres_exner_geopotential
+      scm_state%pres_l_before_remap = scm_state%pres_l
+      scm_state%pres_i_before_remap = scm_state%pres_i
+      
+      !interpolate pres_surf in time
+      call interpolate_surface_pressure_in_time(scm_input, scm_state)
+      
+      !calculate new pressure levels using pres_surf, ak, bk
+      call calc_pres_exner_geopotential(1, scm_state)
+      
       !remap T, q, u, v (and other vars?) to new pressure levels (using saved pres_l); this "applies" vertical advective tendencies and accounts for changing total column mass
+      call remap_state(1, scm_state)
     endif
+    
+    !finish remap_state to do all nonzero tracers and u, v (what about physics quantities from previous timestep?)
+    !modify interpolate_forcing to not repeat unncessary steps (vertical advection when lagrangian_vert)
+    !continue to call calc_pres_exner_geopotential below if not lagrangian_vert?
+    !modify application of forcing for lagrangian_vert (don't need to do vertical advection)
+    !consider doing remapping from surface pressure change and omega separately - might be useful for diagnostics?
+    !consider saving "tendencies" due to remapping (both from surface pressure change and omega)
+    !block leapfrog when lagrangian_vert (how to do time-filtering, etc. with lagrangian_vert)?
+    !consider code organization (put stanza above in do_time_step?)
+    !implement for first time step?
+    !for saving FV3 dynamics tendencies, write CCPP scheme to do this; as part of SCM (or as part of the CCPP scheme?), 
+    !   subtract "tendencies" due to remapping from surface pressure changes (ONLY!) to obtain forcing from FV3 for state vars
     
     call interpolate_forcing(scm_input, scm_state)
     
     !no longer need to call this here since done above
-    call calc_pres_exner_geopotential(1, scm_state)
+    !call calc_pres_exner_geopotential(1, scm_state)
 
     !zero out diagnostics output on EVERY time step - breaks diagnostics averaged over many timesteps
     do j=1, scm_state%n_cols
