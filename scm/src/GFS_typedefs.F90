@@ -788,6 +788,7 @@ module GFS_typedefs
                                             !< used in the GWD parameterization
     integer              :: jcap            !< number of spectral wave trancation used only by sascnv shalcnv
     real(kind=kind_phys) :: cs_parm(10)     !< tunable parameters for Chikira-Sugiyama convection
+    real(kind=kind_phys) :: global_ttend_mult !< tunable temperature tendency multiplication factor for Chikira-Sugiyama convection
     real(kind=kind_phys) :: flgmin(2)       !< [in] ice fraction bounds
     real(kind=kind_phys) :: cgwf(2)         !< multiplication factor for convective GWD
     real(kind=kind_phys) :: ccwf(2)         !< multiplication factor for critical cloud
@@ -2810,6 +2811,7 @@ module GFS_typedefs
     integer              :: jcap           =  1              !< number of spectral wave trancation used only by sascnv shalcnv
 !   real(kind=kind_phys) :: cs_parm(10) = (/5.0,2.5,1.0e3,3.0e3,20.0,-999.,-999.,0.,0.,0./)
     real(kind=kind_phys) :: cs_parm(10) = (/8.0,4.0,1.0e3,3.5e3,20.0,1.0,-999.,1.,0.6,0./)
+    real(kind=kind_phys) :: global_ttend_mult = 1.0
     real(kind=kind_phys) :: flgmin(2)      = (/0.180,0.220/)          !< [in] ice fraction bounds
     real(kind=kind_phys) :: cgwf(2)        = (/0.5d0,0.05d0/)         !< multiplication factor for convective GWD
     real(kind=kind_phys) :: ccwf(2)        = (/1.0d0,1.0d0/)          !< multiplication factor for critical cloud
@@ -2991,7 +2993,8 @@ module GFS_typedefs
                                shinhong, do_ysu, dspheat, lheatstrg, cnvcld,                &
                                random_clds, shal_cnv, imfshalcnv, imfdeepcnv, isatmedmf,    &
                                do_deep, jcap,                                               &
-                               cs_parm, flgmin, cgwf, ccwf, cdmbgwd, sup, ctei_rm, crtrh,   &
+                               cs_parm, global_ttend_mult, flgmin, cgwf, ccwf, cdmbgwd, sup,&
+                               ctei_rm, crtrh,                                              &
                                dlqf, rbcr, shoc_parm, psauras, prauras, wminras,            &
                                do_sppt, do_shum, do_skeb, do_sfcperts,                      &
                           !--- Rayleigh friction
@@ -3295,6 +3298,7 @@ module GFS_typedefs
     Model%cal_pre          = cal_pre
     Model%do_aw            = do_aw
     Model%cs_parm          = cs_parm
+    Model%global_ttend_mult = global_ttend_mult
     Model%do_shoc          = do_shoc
     if (Model%do_shoc) then
       print *, "Error, update of SHOC from May 22 2019 not yet in CCPP"
@@ -3767,6 +3771,7 @@ module GFS_typedefs
               print *,'Chikira-Sugiyama convection scheme used'
           endif
           print *,' cs_parm=',Model%cs_parm,' nctp=',Model%nctp
+          print *,' global_ttend_mult=',Model%global_ttend_mult
         endif
       else
         print*, ' Deep convection scheme disabled'
@@ -4255,6 +4260,7 @@ module GFS_typedefs
       print *, ' nmtvr             : ', Model%nmtvr
       print *, ' jcap              : ', Model%jcap
       print *, ' cs_parm           : ', Model%cs_parm
+      print *, ' global_ttend_mult : ', Model%global_ttend_mult
       print *, ' flgmin            : ', Model%flgmin
       print *, ' cgwf              : ', Model%cgwf
       print *, ' ccwf              : ', Model%ccwf

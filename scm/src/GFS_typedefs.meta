@@ -3019,6 +3019,13 @@
   dimensions = ()
   type = real
   kind = kind_phys
+[global_ttend_mult]
+  standard_name = temperature_tendency_multiplication_factor_for_deep_convection
+  long_name = temperature tendency multiplication factor for deep convection schemes
+  units = none
+  dimensions = ()
+  type = real
+  kind = kind_phys
 [cgwf]
   standard_name = multiplication_factors_for_convective_gravity_wave_drag
   long_name = multiplication factor for convective GWD
