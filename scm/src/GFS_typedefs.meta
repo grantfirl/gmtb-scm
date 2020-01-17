@@ -555,6 +555,20 @@
   dimensions = (horizontal_dimension)
   type = real
   kind = kind_phys
+[alvsf]
+  standard_name = mean_vis_albedo_with_strong_cosz_dependency
+  long_name = mean vis albedo with strong cosz dependency
+  units = frac
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
+[alnsf]
+  standard_name = mean_nir_albedo_with_strong_cosz_dependency
+  long_name = mean nir albedo with strong cosz dependency
+  units = frac
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
 [alvwf]
   standard_name = mean_vis_albedo_with_weak_cosz_dependency
   long_name = mean vis albedo with weak cosz dependency
@@ -565,6 +579,20 @@
 [alnwf]
   standard_name = mean_nir_albedo_with_weak_cosz_dependency
   long_name = mean nir albedo with weak cosz dependency
+  units = frac
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
+[facsf]
+  standard_name = fractional_coverage_with_strong_cosz_dependency
+  long_name = fractional coverage with strong cosz dependency
+  units = frac
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
+[facwf]
+  standard_name = fractional_coverage_with_weak_cosz_dependency
+  long_name = fractional coverage with weak cosz dependency
   units = frac
   dimensions = (horizontal_dimension)
   type = real
