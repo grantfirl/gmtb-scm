@@ -1983,6 +1983,18 @@
   units = flag
   dimensions = ()
   type = logical
+[nx]
+  standard_name = number_of_points_in_x_direction_for_this_MPI_rank
+  long_name = number of points in x direction for this MPI rank
+  units = count
+  dimensions = ()
+  type = integer
+[ny]
+  standard_name = number_of_points_in_y_direction_for_this_MPI_rank
+  long_name = number of points in y direction for this MPI rank
+  units = count
+  dimensions = ()
+  type = integer
 [levs]
   standard_name = vertical_dimension
   long_name = number of vertical levels
@@ -2883,6 +2895,12 @@
 [oz_phys_2015]
   standard_name = flag_for_2015_ozone_physics
   long_name = flag for new (2015) ozone physics
+  units = flag
+  dimensions = ()
+  type = logical
+[h2o_phys]
+  standard_name = flag_for_stratospheric_water_vapor_physics
+  long_name = flag for stratospheric water vapor physics
   units = flag
   dimensions = ()
   type = logical
@@ -4087,6 +4105,127 @@
   standard_name = latitude_degree
   long_name = latitude in degrees
   units = degree
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
+[xlon_d]
+  standard_name = longitude_degree
+  long_name = longitude in degrees
+  units = degree
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
+[jindx1_o3]
+  standard_name = lower_ozone_interpolation_index
+  long_name = interpolation low index for ozone
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[jindx2_o3]
+  standard_name = upper_ozone_interpolation_index
+  long_name = interpolation high index for ozone
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[ddy_o3]
+  standard_name = ozone_interpolation_weight
+  long_name = interpolation high index for ozone
+  units = none
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
+[jindx1_h]
+  standard_name = lower_water_vapor_interpolation_index
+  long_name = interpolation low index for stratospheric water vapor
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[jindx2_h]
+  standard_name = upper_water_vapor_interpolation_index
+  long_name = interpolation high index for stratospheric water vapor
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[ddy_h]
+  standard_name = water_vapor_interpolation_weight
+  long_name = interpolation high index for stratospheric water vapor
+  units = none
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
+[jindx1_aer]
+  standard_name = lower_aerosol_y_interpolation_index
+  long_name = interpolation low index for prescribed aerosols in the y direction
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[jindx2_aer]
+  standard_name = upper_aerosol_y_interpolation_index
+  long_name = interpolation high index for prescribed aerosols in the y direction
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[ddy_aer]
+  standard_name = aerosol_y_interpolation_weight
+  long_name = interpolation high index for prescribed aerosols in the y direction
+  units = none
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
+[iindx1_aer]
+  standard_name = lower_aerosol_x_interpolation_index
+  long_name = interpolation low index for prescribed aerosols in the x direction
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[iindx2_aer]
+  standard_name = upper_aerosol_x_interpolation_index
+  long_name = interpolation high index for prescribed aerosols in the x direction
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[ddx_aer]
+  standard_name = aerosol_x_interpolation_weight
+  long_name = interpolation high index for prescribed aerosols in the x direction
+  units = none
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
+[jindx1_ci]
+  standard_name = lower_cloud_nuclei_y_interpolation_index
+  long_name = interpolation low index for ice and cloud condensation nuclei in the y direction
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[jindx2_ci]
+  standard_name = upper_cloud_nuclei_y_interpolation_index
+  long_name = interpolation high index for ice and cloud condensation nuclei in the y direction
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[ddy_ci]
+  standard_name = cloud_nuclei_y_interpolation_weight
+  long_name = interpolation high index for ice and cloud condensation nuclei in the y direction
+  units = none
+  dimensions = (horizontal_dimension)
+  type = real
+  kind = kind_phys
+[iindx1_ci]
+  standard_name = lower_cloud_nuclei_x_interpolation_index
+  long_name = interpolation low index for ice and cloud condensation nuclei in the x direction
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[iindx2_ci]
+  standard_name = upper_cloud_nuclei_x_interpolation_index
+  long_name = interpolation high index for ice and cloud condensation nuclei in the x direction
+  units = index
+  dimensions = (horizontal_dimension)
+  type = integer
+[ddx_ci]
+  standard_name = cloud_nuclei_x_interpolation_weight
+  long_name = interpolation high index for ice and cloud condensation nuclei in the x direction
+  units = none
   dimensions = (horizontal_dimension)
   type = real
   kind = kind_phys
