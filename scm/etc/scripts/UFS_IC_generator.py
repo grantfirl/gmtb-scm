@@ -20,7 +20,9 @@ import re
 earth_radius = 6371000.0 #m
 rdgas        = 287.05
 rvgas        = 461.50
+cp           = 1004.6
 zvir         = rvgas/rdgas - 1.
+rocp         = rdgas/cp
 grav         = 9.80665
 
 missing_value = 9.99e20
@@ -46,6 +48,7 @@ group1.add_argument('-ij','--index',      help='i,j indices within the tile (if 
 parser.add_argument('-d', '--date',       help='date corresponding to initial conditions in YYYYMMDDHHMM format', required=True)
 parser.add_argument('-i', '--in_dir',     help='input directory path containing FV3 input files', required=True)
 parser.add_argument('-g', '--grid_dir',   help='directory path containing FV3 tile supergrid files', required=True)
+parser.add_argument('-f', '--forcing_dir',help='directory path containing physics diag files', required=True)
 parser.add_argument('-t', '--tile',       help='tile of desired point (if known - bypasses tile search if present)', type=int, choices=range(1,7))
 parser.add_argument('-a', '--area',       help='area of grid cell in m^2', type=float)
 parser.add_argument('-mp','--noahmp',     help='flag to generate cold-start ICs for NoahMP LSM from Noah LSM ICs', action='store_true')
@@ -64,6 +67,7 @@ def parse_arguments():
     date = args.date
     in_dir = args.in_dir
     grid_dir = args.grid_dir
+    forcing_dir = args.forcing_dir
     tile = args.tile
     area = args.area
     case_name = args.case_name
@@ -99,7 +103,7 @@ def parse_arguments():
         date_dict["hour"] = np.int(date[8:10])
         date_dict["minute"] = np.int(date[10:])
         
-    return (location, index, date_dict, in_dir, grid_dir, tile, area, noahmp, case_name, old_chgres)
+    return (location, index, date_dict, in_dir, grid_dir, forcing_dir, tile, area, noahmp, case_name, old_chgres)
 
 def setup_logging():
     """Sets up the logging module."""
@@ -571,10 +575,53 @@ def get_UFS_grid_area(dir, tile, i, j):
     
     return area_in.sum()
 
-def get_UFS_forcing_data(nlevs):
+def get_UFS_forcing_data(nlevs, dir, tile, i, j):
     """Get the horizontal and vertical advective tendencies for the given tile and indices"""
     
     #Note: this is a placeholder function that sets forcing to 0, but will need to be filled out in the future from custom FV3 output
+    
+    filename_pattern = 'dynf*.tile{0}.nc'.format(tile)
+    
+    filenames = []
+    for f_name in os.listdir(dir):
+       if fnmatch.fnmatch(f_name, filename_pattern):
+          filenames.append(f_name)
+    if not filenames:
+        message = 'No filenames matching the pattern {0} found in {1}'.format(filename_pattern,dir)
+        logging.critical(message)
+        raise Exception(message)
+    filenames = sorted(filenames)
+    n_files = len(filenames)
+    
+    p_interfaces = []
+    p_layers = []
+    for filename in filenames:
+        nc_file = Dataset('{0}/{1}'.format(dir,filename))
+        
+        nlevs=len(nc_file.dimensions['pfull'])
+        
+        ak = getattr(nc_file, "ak")[::-1]
+        bk = getattr(nc_file, "bk")[::-1]
+    
+        ps=nc_file['pressfc'][0,j,i]
+    
+        p_interface = np.zeros(nlevs+1)
+        for k in range(nlevs+1):
+            p_interface[k]=ak[k]+ps*bk[k]
+    
+        p_interfaces.append(p_interface)
+        
+        p_layer = np.zeros(nlevs)
+        for k in range(nlevs):
+            p_layer[k] = ((1.0/(rocp+1.0))*(p_interface[k]**(rocp+1.0) - p_interface[k+1]**(rocp+1.0))/(p_interface[k] - p_interface[k+1]))**(1.0/rocp)
+        
+        p_layers.append(p_layer)
+        
+        nc_file.close()
+    p_interfaces = np.asarray(p_interfaces)
+    p_layers = np.asarray(p_layers)
+    
+    exit()
     
     ntimes = 1
         
@@ -1518,7 +1565,7 @@ def main():
     setup_logging()
     
     #read in arguments
-    (location, indices, date, in_dir, grid_dir, tile, area, noahmp, case_name, old_chgres) = parse_arguments()
+    (location, indices, date, in_dir, grid_dir, forcing_dir, tile, area, noahmp, case_name, old_chgres) = parse_arguments()
         
     #find tile containing the point using the supergrid if no tile is specified 
     if not tile:
@@ -1559,7 +1606,7 @@ def main():
     surface_data["lat"] = point_lat
         
     #get UFS forcing data (zeros for now; only placeholder)
-    forcing_data = get_UFS_forcing_data(state_data["nlevs"])
+    forcing_data = get_UFS_forcing_data(state_data["nlevs"], forcing_dir, tile, tile_i, tile_j)
     
     #write SCM case file
     write_SCM_case_file(state_data, surface_data, oro_data, forcing_data, case_name, date)
