@@ -11,6 +11,7 @@ import copy
 import math
 import f90nml
 import re
+import fv3_remap
 
 ###############################################################################
 # Global settings                                                             #
@@ -305,6 +306,8 @@ def get_UFS_IC_data(dir, tile, i, j, old_chgres):
         state_data["T"] = temp
         state_data["pres"] = np.exp(pn1[0:nlevs])
     
+    print "qv = ",state_data["qv"]
+    
     return (state_data, surface_data, oro_data)
     
 def get_UFS_state_data(dir, tile, i, j, old_chgres):
@@ -580,22 +583,45 @@ def get_UFS_forcing_data(nlevs, dir, tile, i, j):
     
     #Note: this is a placeholder function that sets forcing to 0, but will need to be filled out in the future from custom FV3 output
     
-    filename_pattern = 'dynf*.tile{0}.nc'.format(tile)
+    dyn_filename_pattern = 'dynf*.tile{0}.nc'.format(tile)
+    phy_filename_pattern = 'phyf*.tile{0}.nc'.format(tile)
     
-    filenames = []
+    dyn_filenames = []
+    phy_filenames = []
     for f_name in os.listdir(dir):
-       if fnmatch.fnmatch(f_name, filename_pattern):
-          filenames.append(f_name)
-    if not filenames:
-        message = 'No filenames matching the pattern {0} found in {1}'.format(filename_pattern,dir)
+       if fnmatch.fnmatch(f_name, dyn_filename_pattern):
+          dyn_filenames.append(f_name)
+       if fnmatch.fnmatch(f_name, phy_filename_pattern):
+          phy_filenames.append(f_name)
+    if not dyn_filenames:
+        message = 'No filenames matching the pattern {0} found in {1}'.format(dyn_filename_pattern,dir)
         logging.critical(message)
         raise Exception(message)
-    filenames = sorted(filenames)
-    n_files = len(filenames)
+    if not phy_filenames:
+        message = 'No filenames matching the pattern {0} found in {1}'.format(phy_filename_pattern,dir)
+        logging.critical(message)
+        raise Exception(message)
+    dyn_filenames = sorted(dyn_filenames)
+    phy_filenames = sorted(phy_filenames)    
+    
+    if (len(dyn_filenames) != len(phy_filenames)):
+        message = 'The number of dyn files and phy files in {0} matching the patterns does not match.'.format(dir)
+        logging.critical(message)
+        raise Exception(message)
+    
+    n_files = len(dyn_filenames)
+    
+    kord_tm = -9
+    kord_tr = 9
+    t_min = 184.0
+    q_min = 0.0
     
     p_interfaces = []
     p_layers = []
-    for filename in filenames:
+    t_layers = []
+    qv_layers = []
+    time_dyn_hours = []
+    for filename in dyn_filenames:
         nc_file = Dataset('{0}/{1}'.format(dir,filename))
         
         nlevs=len(nc_file.dimensions['pfull'])
@@ -617,9 +643,88 @@ def get_UFS_forcing_data(nlevs, dir, tile, i, j):
         
         p_layers.append(p_layer)
         
+        t_layers.append(nc_file['tmp'][0,::-1,j,i])
+        qv_layers.append(nc_file['spfh'][0,::-1,j,i])
+        
+        try:
+            print nc_file['dt3dt_nophys'][0,::-1,j,i]
+        except:
+            print 'dt3dt_nophys not found in ', filename
+            
+        time_dyn_hours.append(nc_file['time'][0])
+        
         nc_file.close()
     p_interfaces = np.asarray(p_interfaces)
     p_layers = np.asarray(p_layers)
+    t_layers = np.asarray(t_layers)
+    qv_layers = np.asarray(qv_layers)
+    time_dyn_hours = np.asarray(time_dyn_hours)
+
+    tv_layers = t_layers*(1.0 + zvir*qv_layers)
+    
+    dq3dt_nophys = []
+    time_phys_hours = []
+    for filename in phy_filenames:
+        nc_file = Dataset('{0}/{1}'.format(dir,filename))
+        
+        nlevs=len(nc_file.dimensions['pfull'])
+        
+        try:
+            dq3dt_nophys.append(nc_file['dq3dt_nophys'][0,::-1,j,i])
+        except:
+            print 'dq3dt_nophys not found in ', filename
+        
+        time_phys_hours.append(nc_file['time'][0])
+                
+        nc_file.close()
+    dq3dt_nophys = np.asarray(dq3dt_nophys)
+    time_phys_hours = np.asarray(time_phys_hours)
+    
+    dummy = np.zeros(1)
+    
+    tv_layers_remap = np.zeros([t_layers.shape[0],t_layers.shape[1]])
+    qv_layers_remap = np.zeros([qv_layers.shape[0],qv_layers.shape[1]])
+    for t in range(t_layers.shape[0]-1):
+        #calculate new Tv at next time
+        
+        #the remapping procedure for Tv requires initial Tv, log(pres_interface)_old and log(pres_interface)_new; all are reversed to be top-first
+        tv_rev = np.zeros([1,tv_layers.shape[1]])
+        log_pres_1_rev = np.zeros([1,p_interfaces.shape[1]])
+        log_pres_2_rev = np.zeros([1,p_interfaces.shape[1]])
+        tv_rev[0,:] = tv_layers[t,::-1]
+        log_pres_1_rev[0,:] = np.log(p_interfaces[t,::-1])
+        log_pres_2_rev[0,:] = np.log(p_interfaces[t+1,::-1])
+        
+        qv_rev = np.zeros([1,qv_layers.shape[1]])
+        pres_1_rev = np.zeros([1,p_interfaces.shape[1]])
+        pres_2_rev = np.zeros([1,p_interfaces.shape[1]])
+        qv_rev[0,:] = qv_layers[t,::-1]
+        pres_1_rev[0,:] = p_interfaces[t,::-1]
+        pres_2_rev[0,:] = p_interfaces[t+1,::-1]
+        
+        tv_rev_new = fv3_remap.map_scalar(tv_rev.shape[1], log_pres_1_rev, tv_rev, dummy, tv_rev.shape[1], log_pres_2_rev, 0, 0, 1, np.abs(kord_tm), t_min)
+        
+        dp2 = np.zeros([1,qv_rev.shape[1]])
+        for k in range(0,qv_rev.shape[1]):
+            dp2[0,k] = pres_2_rev[0,k+1] - pres_2_rev[0,k]
+        
+        qv_rev_new = fv3_remap.map1_q2(qv_rev.shape[1], pres_1_rev, qv_rev, qv_rev.shape[1], pres_2_rev, dp2, 0, 0, 0, kord_tr, q_min)
+        
+        tv_layers_remap[t+1,:] = tv_rev_new[0,::-1]
+        qv_layers_remap[t+1,:] = qv_rev_new[0,::-1]
+    
+    dqvdt_remap = np.zeros([qv_layers.shape[0]-1,qv_layers.shape[1]])
+    dqvdt_adv = np.zeros([qv_layers.shape[0]-1,qv_layers.shape[1]])
+    for t in range(t_layers.shape[0]-1):
+        dqvdt_remap[t,:] = (qv_layers_remap[t+1,:] - qv_layers[t,:])/(3600.0*(time_dyn_hours[t+1] - time_dyn_hours[t]))
+        dqvdt_adv[t,:] = dq3dt_nophys[t+1,:] - dqvdt_remap[t,:]  #valid at p_layers[t]
+    
+    #if we had dynf,phyf files at every timestep (and the SCM timestep is made to match the UFS), then dqvdt_adv should be
+    #applied uninterpolated for each time step. If dynf and phyf files represent time averages over the previous diagnostic period,
+    #and if forcing terms are interpolatd in time in the SCM, then dqvdt_adv should represent the forcing values in the 
+    #middle of time[t] and time[t+1] from dynf/phyf. That way, the time-averaged applied forcing from time[t] to time[t+1] in the SCM will 
+    #be equal to what is derived from dynf/phyf. (preference should be to have option to remove time-interpolation of forcing such
+    #that the constant forcing applied converged to time-step values as the diag interval approaches the time step)    
     
     exit()
     
