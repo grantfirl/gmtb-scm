@@ -53,6 +53,7 @@ subroutine get_config_nml(scm_state)
   real(kind=dp)        :: sfc_roughness_length_cm !< surface roughness length used for calculating surface layer parameters from specified fluxes
   integer              :: sfc_type !< 0: sea surface, 1: land surface, 2: sea-ice surface
   logical              :: model_ics !<  true means have land info too
+  logical              :: lsm_ics !< true when LSM initial conditions are included (but not all ICs from another model)
   integer              :: reference_profile_choice !< 1: McClatchey profile, 2: mid-latitude summer standard atmosphere
   integer              :: year, month, day, hour
   real(kind=dp)        :: column_area
@@ -67,8 +68,9 @@ subroutine get_config_nml(scm_state)
   CHARACTER(LEN=*), parameter :: experiment_namelist = 'input_experiment.nml'
 
   NAMELIST /case_config/ model_name, n_columns, case_name, dt, time_scheme, runtime, output_frequency, &
-    n_levels, output_dir, output_file, case_data_dir, vert_coord_data_dir, thermo_forcing_type, model_ics,C_RES,mom_forcing_type, relax_time, &
-    sfc_type, sfc_flux_spec, sfc_roughness_length_cm, reference_profile_choice, year, month, day, hour, column_area
+    n_levels, output_dir, output_file, case_data_dir, vert_coord_data_dir, thermo_forcing_type, model_ics, &
+    lsm_ics, C_RES,mom_forcing_type, relax_time, sfc_type, sfc_flux_spec, sfc_roughness_length_cm, &
+    reference_profile_choice, year, month, day, hour, column_area
     
   NAMELIST /physics_config/ physics_suite, physics_nml
 
@@ -98,6 +100,7 @@ subroutine get_config_nml(scm_state)
   sfc_roughness_length_cm = 1.0
   sfc_type = 0
   model_ics = .false.
+  lsm_ics = .false.
   reference_profile_choice = 1
   year = 2006
   month = 1
@@ -175,6 +178,7 @@ subroutine get_config_nml(scm_state)
   scm_state%sfc_roughness_length_cm(:) = sfc_roughness_length_cm
   scm_state%sfc_type = REAL(sfc_type, kind=dp)
   scm_state%model_ics = model_ics
+  scm_state%lsm_ics = lsm_ics
   scm_state%reference_profile_choice = reference_profile_choice
   scm_state%relax_time = relax_time
   
@@ -329,7 +333,7 @@ subroutine get_case_init(scm_state, scm_input)
   
   call check(NF90_INQ_DIMID(ncid,"levels",varID))
   call check(NF90_INQUIRE_DIMENSION(ncid, varID, tmpName, input_nlev))
-  if (scm_state%model_ics) then
+  if (scm_state%model_ics .or. scm_state%lsm_ics) then
     call check(NF90_INQ_DIMID(ncid,"nsoil",varID))
     call check(NF90_INQUIRE_DIMENSION(ncid, varID, tmpName, input_nsoil))
     ierr = NF90_INQ_DIMID(ncid,"nsnow",varID)
@@ -359,11 +363,15 @@ subroutine get_case_init(scm_state, scm_input)
   !>  - Allocate the initial profiles.
   allocate(input_thetail(input_nlev), input_qt(input_nlev), input_ql(input_nlev), input_qi(input_nlev), &
     input_u(input_nlev), input_v(input_nlev), input_tke(input_nlev), input_ozone(input_nlev), stat=allocate_status)
-   if (scm_state%model_ics) then
-     allocate(input_stc(input_nsoil), input_temp(input_nlev),input_smc(input_nsoil), input_slc(input_nsoil), &
-              input_pres_i(input_nlev+1),input_pres_l(input_nlev), stat=allocate_status)
-     input_pres_i(:) = -999.9
-     input_pres_l(:) = -999.9
+   if (scm_state%model_ics .or. scm_state%lsm_ics) then
+     allocate(input_stc(input_nsoil), input_smc(input_nsoil), input_slc(input_nsoil), &
+              stat=allocate_status)
+     if (scm_state%model_ics) then
+       allocate(input_temp(input_nlev),input_smc(input_nsoil), input_slc(input_nsoil), &
+                stat=allocate_status)
+       input_pres_i(:) = -999.9
+       input_pres_l(:) = -999.9
+     endif
      if (noahmp) then
        allocate(input_snicexy(input_nsnow), input_snliqxy(input_nsnow), input_tsnoxy(input_nsnow), &
           input_smoiseq(input_nsoil), input_zsnsoxy(input_nsnow + input_nsoil))
@@ -389,32 +397,34 @@ subroutine get_case_init(scm_state, scm_input)
   call check(NF90_GET_VAR(grp_ncid,varID,input_tke))
   call check(NF90_INQ_VARID(grp_ncid,"ozone",varID))
   call check(NF90_GET_VAR(grp_ncid,varID,input_ozone))
+  if (scm_state%model_ics .or. scm_state%lsm_ics) then
+    call check(NF90_INQ_VARID(grp_ncid,"stc",varID))
+    call check(NF90_GET_VAR(grp_ncid,varID,input_stc))
+    call check(NF90_INQ_VARID(grp_ncid,"smc",varID))
+    call check(NF90_GET_VAR(grp_ncid,varID,input_smc))
+    call check(NF90_INQ_VARID(grp_ncid,"slc",varID))
+    call check(NF90_GET_VAR(grp_ncid,varID,input_slc))
+    if (noahmp) then
+      call check(NF90_INQ_VARID(grp_ncid,"snicexy",varID))
+      call check(NF90_GET_VAR(grp_ncid,varID,input_snicexy))
+      call check(NF90_INQ_VARID(grp_ncid,"snliqxy",varID))
+      call check(NF90_GET_VAR(grp_ncid,varID,input_snliqxy))
+      call check(NF90_INQ_VARID(grp_ncid,"tsnoxy",varID))
+      call check(NF90_GET_VAR(grp_ncid,varID,input_tsnoxy))
+      call check(NF90_INQ_VARID(grp_ncid,"smoiseq",varID))
+      call check(NF90_GET_VAR(grp_ncid,varID,input_smoiseq))
+      call check(NF90_INQ_VARID(grp_ncid,"zsnsoxy",varID))
+      call check(NF90_GET_VAR(grp_ncid,varID,input_zsnsoxy))
+    endif
+  end if
   if (scm_state%model_ics) then
      call check(NF90_INQ_VARID(grp_ncid,"temp",varID))
      call check(NF90_GET_VAR(grp_ncid,varID,input_temp))
-     call check(NF90_INQ_VARID(grp_ncid,"stc",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_stc))
-     call check(NF90_INQ_VARID(grp_ncid,"smc",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_smc))
-     call check(NF90_INQ_VARID(grp_ncid,"slc",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_slc))
      ierr = NF90_INQ_VARID(grp_ncid,"pres_i",varID)
      if (ierr.EQ.0) then ! input file should have pres_i and pres_l
         call check(NF90_GET_VAR(grp_ncid,varID,input_pres_i))
         call check(NF90_INQ_VARID(grp_ncid,"pres_l",varID))
         call check(NF90_GET_VAR(grp_ncid,varID,input_pres_l))
-     endif
-     if (noahmp) then
-       call check(NF90_INQ_VARID(grp_ncid,"snicexy",varID))
-       call check(NF90_GET_VAR(grp_ncid,varID,input_snicexy))
-       call check(NF90_INQ_VARID(grp_ncid,"snliqxy",varID))
-       call check(NF90_GET_VAR(grp_ncid,varID,input_snliqxy))
-       call check(NF90_INQ_VARID(grp_ncid,"tsnoxy",varID))
-       call check(NF90_GET_VAR(grp_ncid,varID,input_tsnoxy))
-       call check(NF90_INQ_VARID(grp_ncid,"smoiseq",varID))
-       call check(NF90_GET_VAR(grp_ncid,varID,input_smoiseq))
-       call check(NF90_INQ_VARID(grp_ncid,"zsnsoxy",varID))
-       call check(NF90_GET_VAR(grp_ncid,varID,input_zsnsoxy))
      endif
   endif
   
@@ -431,8 +441,7 @@ subroutine get_case_init(scm_state, scm_input)
   call check(NF90_GET_VAR(grp_ncid,varID,input_lat))
   call check(NF90_INQ_VARID(grp_ncid,"lon",varID))
   call check(NF90_GET_VAR(grp_ncid,varID,input_lon))
-  
-  if (scm_state%model_ics) then
+  if (scm_state%model_ics .or. scm_state%lsm_ics) then
      call check(NF90_INQ_VARID(grp_ncid,"vegsrc",varID))
      call check(NF90_GET_VAR(grp_ncid,varID,input_vegsrc))
      call check(NF90_INQ_VARID(grp_ncid,"vegtyp",varID))
@@ -465,8 +474,6 @@ subroutine get_case_init(scm_state, scm_input)
      call check(NF90_GET_VAR(grp_ncid,varID,input_snoalb))
      call check(NF90_INQ_VARID(grp_ncid,"sncovr",varID))
      call check(NF90_GET_VAR(grp_ncid,varID,input_sncovr))
-     call check(NF90_INQ_VARID(grp_ncid,"area",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_area))
      call check(NF90_INQ_VARID(grp_ncid,"tg3",varID))
      call check(NF90_GET_VAR(grp_ncid,varID,input_tg3))
      call check(NF90_INQ_VARID(grp_ncid,"uustar",varID))
@@ -479,34 +486,6 @@ subroutine get_case_init(scm_state, scm_input)
      call check(NF90_GET_VAR(grp_ncid,varID,input_alvwf))
      call check(NF90_INQ_VARID(grp_ncid,"alnwf",varID))
      call check(NF90_GET_VAR(grp_ncid,varID,input_alnwf))
-     call check(NF90_INQ_VARID(grp_ncid,"stddev",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_stddev))
-     call check(NF90_INQ_VARID(grp_ncid,"convexity",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_convexity))
-     call check(NF90_INQ_VARID(grp_ncid,"oa1",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_oa1))
-     call check(NF90_INQ_VARID(grp_ncid,"oa2",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_oa2))
-     call check(NF90_INQ_VARID(grp_ncid,"oa3",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_oa3))
-     call check(NF90_INQ_VARID(grp_ncid,"oa4",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_oa4))
-     call check(NF90_INQ_VARID(grp_ncid,"ol1",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_ol1))
-     call check(NF90_INQ_VARID(grp_ncid,"ol2",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_ol2))
-     call check(NF90_INQ_VARID(grp_ncid,"ol3",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_ol3))
-     call check(NF90_INQ_VARID(grp_ncid,"ol4",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_ol4))
-     call check(NF90_INQ_VARID(grp_ncid,"sigma",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_sigma))
-     call check(NF90_INQ_VARID(grp_ncid,"gamma",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_gamma))
-     call check(NF90_INQ_VARID(grp_ncid,"theta",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_theta))
-     call check(NF90_INQ_VARID(grp_ncid,"elvmax",varID))
-     call check(NF90_GET_VAR(grp_ncid,varID,input_elvmax))
      call check(NF90_INQ_VARID(grp_ncid,"facsf",varID))
      call check(NF90_GET_VAR(grp_ncid,varID,input_facsf))
      call check(NF90_INQ_VARID(grp_ncid,"facwf",varID))
@@ -572,6 +551,38 @@ subroutine get_case_init(scm_state, scm_input)
        call check(NF90_GET_VAR(grp_ncid,varID,input_snowxy))
      endif
   endif
+  if (scm_state%model_ics) then
+     call check(NF90_INQ_VARID(grp_ncid,"stddev",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_stddev))
+     call check(NF90_INQ_VARID(grp_ncid,"convexity",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_convexity))
+     call check(NF90_INQ_VARID(grp_ncid,"oa1",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_oa1))
+     call check(NF90_INQ_VARID(grp_ncid,"oa2",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_oa2))
+     call check(NF90_INQ_VARID(grp_ncid,"oa3",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_oa3))
+     call check(NF90_INQ_VARID(grp_ncid,"oa4",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_oa4))
+     call check(NF90_INQ_VARID(grp_ncid,"ol1",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_ol1))
+     call check(NF90_INQ_VARID(grp_ncid,"ol2",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_ol2))
+     call check(NF90_INQ_VARID(grp_ncid,"ol3",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_ol3))
+     call check(NF90_INQ_VARID(grp_ncid,"ol4",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_ol4))
+     call check(NF90_INQ_VARID(grp_ncid,"sigma",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_sigma))
+     call check(NF90_INQ_VARID(grp_ncid,"gamma",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_gamma))
+     call check(NF90_INQ_VARID(grp_ncid,"theta",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_theta))
+     call check(NF90_INQ_VARID(grp_ncid,"elvmax",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_elvmax))
+     call check(NF90_INQ_VARID(grp_ncid,"area",varID))
+     call check(NF90_GET_VAR(grp_ncid,varID,input_area))
+  endif
 
   !> - Read in the forcing data.
 
@@ -635,8 +646,11 @@ subroutine get_case_init(scm_state, scm_input)
   call check(NF90_CLOSE(NCID=ncid))
 
   call scm_input%create(input_ntimes, input_nlev)
+  if (scm_state%model_ics .or. scm_state%lsm_ics) then
+    call scm_input%create_lsmics(input_nsoil,input_nsnow,noahmp)
+  endif
   if (scm_state%model_ics) then
-     call scm_input%create_modelics(input_nsoil,input_nsnow,input_nlev,noahmp)
+     call scm_input%create_modelics(input_nlev)
   endif
   
   ! GJF already done in scm_input%create routine
@@ -677,7 +691,7 @@ subroutine get_case_init(scm_state, scm_input)
   scm_input%input_T_nudge = input_T_nudge
   scm_input%input_thil_nudge = input_thil_nudge
   scm_input%input_qt_nudge = input_qt_nudge
-  if (scm_state%model_ics) then
+  if (scm_state%model_ics .or. scm_state%lsm_ics) then
      scm_input%input_stc   = input_stc  
      scm_input%input_smc   = input_smc  
      scm_input%input_slc   = input_slc  
@@ -697,31 +711,14 @@ subroutine get_case_init(scm_state, scm_input)
      scm_input%input_snwdph   = input_snwdph  
      scm_input%input_snoalb   = input_snoalb  
      scm_input%input_sncovr   = input_sncovr  
-     scm_input%input_area     = input_area    
      scm_input%input_tg3      = input_tg3     
      scm_input%input_uustar   = input_uustar  
      scm_input%input_alvsf    = input_alvsf   
      scm_input%input_alnsf    = input_alnsf   
      scm_input%input_alvwf    = input_alvwf   
      scm_input%input_alnwf    = input_alnwf   
-     scm_input%input_convexity= input_convexity
-     scm_input%input_stddev   = input_stddev  
-     scm_input%input_oa1      = input_oa1     
-     scm_input%input_oa2      = input_oa2     
-     scm_input%input_oa3      = input_oa3     
-     scm_input%input_oa4      = input_oa4     
-     scm_input%input_ol1      = input_ol1     
-     scm_input%input_ol2      = input_ol2    
-     scm_input%input_ol3      = input_ol3     
-     scm_input%input_ol4      = input_ol4     
-     scm_input%input_sigma    = input_sigma   
-     scm_input%input_theta    = input_theta   
-     scm_input%input_gamma    = input_gamma   
-     scm_input%input_elvmax   = input_elvmax  
      scm_input%input_facsf    = input_facsf   
-     scm_input%input_facwf    = input_facwf   
-     scm_input%input_pres_i   = input_pres_i  
-     scm_input%input_pres_l   = input_pres_l
+     scm_input%input_facwf    = input_facwf
      if (noahmp) then
        scm_input%input_snicexy    = input_snicexy
        scm_input%input_snliqxy    = input_snliqxy
@@ -758,6 +755,25 @@ subroutine get_case_init(scm_state, scm_input)
        scm_input%input_rechxy = input_rechxy
        scm_input%input_snowxy = input_snowxy
      endif
+  endif
+  if (scm_state%model_ics) then
+     scm_input%input_convexity= input_convexity
+     scm_input%input_stddev   = input_stddev  
+     scm_input%input_oa1      = input_oa1     
+     scm_input%input_oa2      = input_oa2     
+     scm_input%input_oa3      = input_oa3     
+     scm_input%input_oa4      = input_oa4     
+     scm_input%input_ol1      = input_ol1     
+     scm_input%input_ol2      = input_ol2    
+     scm_input%input_ol3      = input_ol3     
+     scm_input%input_ol4      = input_ol4     
+     scm_input%input_sigma    = input_sigma   
+     scm_input%input_theta    = input_theta   
+     scm_input%input_gamma    = input_gamma   
+     scm_input%input_elvmax   = input_elvmax  
+     scm_input%input_pres_i   = input_pres_i  
+     scm_input%input_pres_l   = input_pres_l  
+     scm_input%input_area     = input_area    
   endif
 
 !> @}

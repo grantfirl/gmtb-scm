@@ -430,8 +430,8 @@ begin
   snoalb = 0.616528332233429 ;corresponds to value from UFS ICs
   snoalb@long_name = "maximum snow albedo"
   
-  snocvr = 0.0 ;corresponds to case specs
-  snocvr@long_name = "snow area fraction"
+  sncovr = 0.0 ;corresponds to case specs
+  sncovr@long_name = "snow area fraction"
   
   tg3 = 283.15 ;corresponds to case specs
   tg3@units = "K"
@@ -598,9 +598,9 @@ begin
   filevarattdef(g1,"snoalb",snoalb)
   g1->snoalb = snoalb
   
-  filevardef(g1,"snocvr",typeof(snocvr),"ncl_scalar")
-  filevarattdef(g1,"snocvr",snocvr)
-  g1->snocvr = snocvr
+  filevardef(g1,"sncovr",typeof(sncovr),"ncl_scalar")
+  filevarattdef(g1,"sncovr",sncovr)
+  g1->sncovr = sncovr
   
   filevardef(g1,"tg3",typeof(tg3),"ncl_scalar")
   filevarattdef(g1,"tg3",tg3)

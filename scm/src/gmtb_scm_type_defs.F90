@@ -87,6 +87,7 @@ module gmtb_scm_type_defs
     integer                           :: reference_profile_choice !< 1: McClatchey profile, 2: mid-latitude summer standard atmosphere
     integer                           :: C_RES !< effective model resolution in cubed sphere resolution (needed for GWD)
     logical                           :: model_ics !<  true means have land info too
+    logical                           :: lsm_ics !< true when LSM initial conditions are included (but not all ICs from another model)
 
     real(kind=dp)                           :: model_time !< elapsed model time (s)
     real(kind=dp)                           :: dt !< physics time step (s)
@@ -307,6 +308,7 @@ module gmtb_scm_type_defs
     contains
       procedure :: create  => scm_input_create
       procedure :: create_modelics  => scm_input_create_model_ics
+      procedure :: create_lsmics  => scm_input_create_lsm_ics
 
   end type scm_input_type
 
@@ -583,21 +585,18 @@ module gmtb_scm_type_defs
     scm_state%zsnsoxy = real_zero
     
   end subroutine scm_state_create
-
-  subroutine scm_input_create_model_ics(scm_input,nlev_soil,nlev_snow,nlev,noahmp)
+  
+  subroutine scm_input_create_lsm_ics(scm_input,nlev_soil,nlev_snow,noahmp)
     class(scm_input_type)             :: scm_input
-    integer, intent(in)               :: nlev,nlev_soil,nlev_snow
+    integer, intent(in)               :: nlev_soil,nlev_snow
     logical, intent(in)               :: noahmp
-
+    
     scm_input%input_nsoil= nlev_soil
     allocate(scm_input%input_stc(nlev_soil), scm_input%input_smc(nlev_soil), scm_input%input_slc(nlev_soil))
-    allocate(scm_input%input_temp(nlev), scm_input%input_pres_i(nlev+1),scm_input%input_pres_l(nlev))
+    
     scm_input%input_stc    = real_zero
     scm_input%input_smc    = real_zero
     scm_input%input_slc    = real_zero
-    scm_input%input_temp   = real_zero
-    scm_input%input_pres_i = real_zero
-    scm_input%input_pres_l = real_zero
     
     if (noahmp) then
       scm_input%input_nsnow = nlev_snow
@@ -609,6 +608,18 @@ module gmtb_scm_type_defs
       scm_input%input_smoiseq    = real_zero
       scm_input%input_zsnsoxy    = real_zero
     endif
+    
+  end subroutine scm_input_create_lsm_ics
+
+  subroutine scm_input_create_model_ics(scm_input,nlev)
+    class(scm_input_type)             :: scm_input
+    integer, intent(in)               :: nlev
+
+    allocate(scm_input%input_temp(nlev), scm_input%input_pres_i(nlev+1),scm_input%input_pres_l(nlev))
+
+    scm_input%input_temp   = real_zero
+    scm_input%input_pres_i = real_zero
+    scm_input%input_pres_l = real_zero
 
   end subroutine scm_input_create_model_ics
 
@@ -885,7 +896,7 @@ module gmtb_scm_type_defs
       physics%Sfcprop%spec_sh_flux => scm_state%sh_flux
       physics%Sfcprop%spec_lh_flux => scm_state%lh_flux
     endif
-    if(scm_state%model_ics) then
+    if(scm_state%model_ics .or. scm_state%lsm_ics) then
       !physics%Sfcprop%zorl => scm_state%sfc_roughness_length_cm
       physics%Sfcprop%canopy => scm_state%canopy
       physics%Sfcprop%hice   => scm_state%hice

@@ -117,14 +117,45 @@ subroutine set_state(scm_input, scm_reference, scm_state)
      end if
    
      scm_state%state_tracer(:,:,scm_state%cloud_water_index,1) = 0.0
-   else
+   endif
+   
+   if (scm_state%model_ics) then
      do i=1, scm_state%n_cols
-        !input_T = (scm_input%input_pres/p0)**con_rocp*(scm_input%input_thetail + (con_hvap/con_cp)*scm_input%input_ql + (con_hfus/con_cp)*scm_input%input_qi)
-        scm_state%state_u(i,:,1) = scm_input%input_u(:)
-        scm_state%state_v(i,:,1) = scm_input%input_v(:)
-        scm_state%state_T(i,:,1) = scm_input%input_temp(:)
-        scm_state%state_tracer(i,:,scm_state%water_vapor_index,1)=scm_input%input_qt
-        scm_state%state_tracer(i,:,scm_state%ozone_index,1)=scm_input%input_ozone
+       !input_T = (scm_input%input_pres/p0)**con_rocp*(scm_input%input_thetail + (con_hvap/con_cp)*scm_input%input_ql + (con_hfus/con_cp)*scm_input%input_qi)
+       scm_state%state_u(i,:,1) = scm_input%input_u(:)
+       scm_state%state_v(i,:,1) = scm_input%input_v(:)
+       scm_state%state_T(i,:,1) = scm_input%input_temp(:)
+       scm_state%state_tracer(i,:,scm_state%water_vapor_index,1)=scm_input%input_qt
+       scm_state%state_tracer(i,:,scm_state%ozone_index,1)=scm_input%input_ozone
+       
+       scm_state%sfc_type(i) = scm_input%input_slmsk !< this "overwrites" what is in the SCM case namelist if model ICs are present
+       
+       if (scm_input%input_pres_i(1).GT. 0.0) then ! pressure are read in, overwrite values
+          scm_state%pres_i(i,:)=scm_input%input_pres_i
+          scm_state%pres_l(i,:)=scm_input%input_pres_l
+       endif
+       
+       scm_state%hprime(i,1)=scm_input%input_stddev
+       scm_state%hprime(i,2)=scm_input%input_convexity
+       scm_state%hprime(i,3)=scm_input%input_oa1
+       scm_state%hprime(i,4)=scm_input%input_oa2
+       scm_state%hprime(i,5)=scm_input%input_oa3
+       scm_state%hprime(i,6)=scm_input%input_oa4
+       scm_state%hprime(i,7)=scm_input%input_ol1
+       scm_state%hprime(i,8)=scm_input%input_ol2
+       scm_state%hprime(i,9)=scm_input%input_ol3
+       scm_state%hprime(i,10)=scm_input%input_ol4
+       scm_state%hprime(i,11)=scm_input%input_theta
+       scm_state%hprime(i,12)=scm_input%input_gamma
+       scm_state%hprime(i,13)=scm_input%input_sigma
+       scm_state%hprime(i,14)=scm_input%input_elvmax
+       
+       scm_state%area(i) = scm_input%input_area    
+     enddo
+   endif
+   
+   if (scm_state%model_ics .or. scm_state%lsm_ics) then
+      do i=1, scm_state%n_cols
         scm_state%veg_type(i) = scm_input%input_vegtyp
         scm_state%soil_type(i) = scm_input%input_soiltyp
         scm_state%slope_type(i) = scm_input%input_slopetype
@@ -132,7 +163,6 @@ subroutine set_state(scm_input, scm_reference, scm_state)
         scm_state%shdmin(i) = scm_input%input_shdmin  
         scm_state%shdmax(i) = scm_input%input_shdmax  
         scm_state%sfc_roughness_length_cm = scm_input%input_zorl    
-        scm_state%sfc_type(i) = scm_input%input_slmsk !< this "overwrites" what is in the SCM case namelist if model ICs are present
         scm_state%canopy(i) = scm_input%input_canopy  
         scm_state%hice(i) = scm_input%input_hice  
         scm_state%fice(i) = scm_input%input_fice  
@@ -140,34 +170,15 @@ subroutine set_state(scm_input, scm_reference, scm_state)
         scm_state%snwdph(i) = scm_input%input_snwdph  
         scm_state%snoalb(i) = scm_input%input_snoalb  
         scm_state%sncovr(i) = scm_input%input_sncovr  
-        scm_state%area(i) = scm_input%input_area    
         scm_state%tg3(i)    = scm_input%input_tg3     
         scm_state%uustar(i) = scm_input%input_uustar  
         scm_state%stc(i,:,1)=scm_input%input_stc
         scm_state%smc(i,:,1)=scm_input%input_smc
         scm_state%slc(i,:,1)=scm_input%input_slc
-        if (scm_input%input_pres_i(1).GT. 0.0) then ! pressure are read in, overwrite values
-           scm_state%pres_i(i,:)=scm_input%input_pres_i
-           scm_state%pres_l(i,:)=scm_input%input_pres_l
-        endif
         scm_state%alvsf(i)=scm_input%input_alvsf
         scm_state%alnsf(i)=scm_input%input_alnsf
         scm_state%alvwf(i)=scm_input%input_alvwf
         scm_state%alnwf(i)=scm_input%input_alnwf
-        scm_state%hprime(i,1)=scm_input%input_stddev
-        scm_state%hprime(i,2)=scm_input%input_convexity
-        scm_state%hprime(i,3)=scm_input%input_oa1
-        scm_state%hprime(i,4)=scm_input%input_oa2
-        scm_state%hprime(i,5)=scm_input%input_oa3
-        scm_state%hprime(i,6)=scm_input%input_oa4
-        scm_state%hprime(i,7)=scm_input%input_ol1
-        scm_state%hprime(i,8)=scm_input%input_ol2
-        scm_state%hprime(i,9)=scm_input%input_ol3
-        scm_state%hprime(i,10)=scm_input%input_ol4
-        scm_state%hprime(i,11)=scm_input%input_theta
-        scm_state%hprime(i,12)=scm_input%input_gamma
-        scm_state%hprime(i,13)=scm_input%input_sigma
-        scm_state%hprime(i,14)=scm_input%input_elvmax
         scm_state%facsf(i)=scm_input%input_facsf
         scm_state%facwf(i)=scm_input%input_facwf
      enddo
