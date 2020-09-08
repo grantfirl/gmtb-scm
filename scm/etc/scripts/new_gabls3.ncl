@@ -78,7 +78,7 @@ begin
   T_K = T_C + 273.15 ;convert from degC to Kelvin
 
   T_surf = new((/ dimsizes(time) /),float)
-  T_surf = 27.0 + 273.15
+  T_surf = 23.4 + 273.15
 
 ;  do i=0,dimsizes(time)-1,1
 ;    T_surf(i) = T_K(0)
