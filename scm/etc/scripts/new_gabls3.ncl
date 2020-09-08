@@ -489,7 +489,7 @@ begin
   fAtt@creation_date = systemfunc("date")
   fileattdef(fo,fAtt)                 ;Add attibutes to output file
 
-  dimNames = (/ "time","levels","soil_depth" /)
+  dimNames = (/ "time","levels","nsoil" /)
   dimSizes = (/ ntim,klev,ksoil /)
   dimUnlim = (/ False,True,True /)
 ;  dimNames = (/ "levels","time" /)
@@ -509,7 +509,7 @@ begin
   filevarattdef(fo,"levels",levels)
   fo->levels = (/ levels /)
   
-  filevardef(fo,"soil_depth",typeof(soil_depth),"soil_depth")
+  filevardef(fo,"soil_depth",typeof(soil_depth),"nsoil")
   filevarattdef(fo,"soil_depth",soil_depth)
   fo->soil_depth = (/ soil_depth /)
 
@@ -670,15 +670,15 @@ begin
   filevarattdef(g2,"ozone",ozone)
   g2->ozone = (/ozone/)
   
-  filevardef(g2,"stc",typeof(stc),"soil_depth")
+  filevardef(g2,"stc",typeof(stc),"nsoil")
   filevarattdef(g2,"stc",stc)
   g2->stc = (/stc/)
   
-  filevardef(g2,"smc",typeof(smc),"soil_depth")
+  filevardef(g2,"smc",typeof(smc),"nsoil")
   filevarattdef(g2,"smc",smc)
   g2->smc = (/smc/)
   
-  filevardef(g2,"slc",typeof(slc),"soil_depth")
+  filevardef(g2,"slc",typeof(slc),"nsoil")
   filevarattdef(g2,"slc",slc)
   g2->slc = (/slc/)
 
