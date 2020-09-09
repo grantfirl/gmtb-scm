@@ -86,8 +86,10 @@ module gmtb_scm_type_defs
     integer                           :: thermo_forcing_type !< 1: "revealed forcing", 2: "horizontal advective forcing", 3: "relaxation forcing"
     integer                           :: reference_profile_choice !< 1: McClatchey profile, 2: mid-latitude summer standard atmosphere
     integer                           :: C_RES !< effective model resolution in cubed sphere resolution (needed for GWD)
+    integer                           :: spinup_timesteps !< number of timesteps to spin up
     logical                           :: model_ics !<  true means have land info too
     logical                           :: lsm_ics !< true when LSM initial conditions are included (but not all ICs from another model)
+    logical                           :: do_spinup !< true when allowing the model to spin up before the "official" model integration starts
 
     real(kind=dp)                           :: model_time !< elapsed model time (s)
     real(kind=dp)                           :: dt !< physics time step (s)
@@ -825,7 +827,7 @@ module gmtb_scm_type_defs
     physics%Statein%phil => scm_state%geopotential_l
     physics%Statein%prsl => scm_state%pres_l
     physics%Statein%prslk => scm_state%exner_l
-
+    
     physics%Statein%pgr => scm_state%pres_surf
     physics%Statein%ugrs => scm_state%state_u(:,:,1)
     physics%Statein%vgrs => scm_state%state_v(:,:,1)

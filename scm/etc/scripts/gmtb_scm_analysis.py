@@ -17,6 +17,7 @@ import gmtb_scm_read_obs as gsro
 Rd = 287.0
 Rv = 461.0
 g = 9.81
+missing_value = -999
 
 plot_ext = '.pdf' #.pdf, .eps, .ps, .png (.png is fastest, but raster)
 
@@ -137,6 +138,14 @@ dT_dt_rad_forc = []
 h_advec_thil = []
 h_advec_qt = []
 T_s = []
+T_soil_1 = []
+T_soil_2 = []
+T_soil_3 = []
+T_soil_4 = []
+soil_moisture_1 = []
+soil_moisture_2 = []
+soil_moisture_3 = []
+soil_moisture_4 = []
 pres_s = []
 lhf = []
 shf = []
@@ -227,7 +236,7 @@ for i in range(len(gmtb_scm_datasets)):
     month.append(nc_fid.variables['init_month'][:])
     day.append(nc_fid.variables['init_day'][:])
     hour.append(nc_fid.variables['init_hour'][:])
-
+    
     time.append(nc_fid.variables['time'][:])
     pres_l.append(nc_fid.variables['pres'][:])
     pres_i.append(nc_fid.variables['pres_i'][:])
@@ -251,6 +260,26 @@ for i in range(len(gmtb_scm_datasets)):
     h_advec_thil.append(nc_fid.variables['h_advec_thil'][:])
     h_advec_qt.append(nc_fid.variables['h_advec_qt'][:])
     T_s.append(nc_fid.variables['T_s'][:])
+    try:
+        T_soil_1.append(nc_fid.variables['T_soil_1'][:])
+        T_soil_2.append(nc_fid.variables['T_soil_2'][:])
+        T_soil_3.append(nc_fid.variables['T_soil_3'][:])
+        T_soil_4.append(nc_fid.variables['T_soil_4'][:])
+        soil_moisture_1.append(nc_fid.variables['soil_moisture_1'][:])
+        soil_moisture_2.append(nc_fid.variables['soil_moisture_2'][:])
+        soil_moisture_3.append(nc_fid.variables['soil_moisture_3'][:])
+        soil_moisture_4.append(nc_fid.variables['soil_moisture_4'][:])
+    except KeyError:
+        print 'T_soil_X and/or soil_moisture_X are not in the output file {0}'.format(gmtb_scm_datasets[i])
+        print 'Missing variables are replaced with {0}'.format(missing_value)
+        T_soil_1.append(missing_value*np.ones(len(time[-1])))
+        T_soil_2.append(missing_value*np.ones(len(time[-1])))
+        T_soil_3.append(missing_value*np.ones(len(time[-1])))
+        T_soil_4.append(missing_value*np.ones(len(time[-1])))
+        soil_moisture_1.append(missing_value*np.ones(len(time[-1])))
+        soil_moisture_2.append(missing_value*np.ones(len(time[-1])))
+        soil_moisture_3.append(missing_value*np.ones(len(time[-1])))
+        soil_moisture_4.append(missing_value*np.ones(len(time[-1])))
     pres_s.append(nc_fid.variables['pres_s'][:])
     lhf.append(nc_fid.variables['lhf'][:])
     shf.append(nc_fid.variables['shf'][:])
