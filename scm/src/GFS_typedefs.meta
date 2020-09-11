@@ -269,14 +269,14 @@
   type = real
   kind = kind_phys
 [qgrs(:,:,index_for_graupel_volume)]
-  standard_name = graupel volume
+  standard_name = graupel_volume
   long_name = graupel particle volume
   units = m3 kg-1
   dimensions = (horizontal_dimension,vertical_dimension)
   type = real
   kind = kind_phys
 [qgrs(:,:,index_for_hail_volume)]
-  standard_name = hail volume
+  standard_name = hail_volume
   long_name = hail particle volume
   units = m3 kg-1
   dimensions = (horizontal_dimension,vertical_dimension)
@@ -2805,6 +2805,18 @@
 [imp_physics_mg]
   standard_name = flag_for_morrison_gettelman_microphysics_scheme
   long_name = choice of Morrison-Gettelman microphysics scheme
+  units = flag
+  dimensions = ()
+  type = integer
+[imp_physics_nssl2m]
+  standard_name = flag_for_nssl2m_microphysics_scheme
+  long_name = choice of NSSL 2-moment microphysics scheme
+  units = flag
+  dimensions = ()
+  type = integer
+[imp_physics_nssl2mccn]
+  standard_name = flag_for_nssl2mccn_microphysics_scheme
+  long_name = choice of NSSL 2-moment microphysics scheme with CCN
   units = flag
   dimensions = ()
   type = integer

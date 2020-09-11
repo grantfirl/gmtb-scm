@@ -11,5 +11,6 @@ default_physics_namelists = {"SCM_csawmg":"input_csawmg.nml",
                             "SCM_GFS_v15p2_FA":"input_GFS_v15p2_FA.nml",
                             "SCM_GFS_v15p2_YSU":"input_GFS_v15p2_YSU.nml",
                             "SCM_GFS_v15p2_saYSU":"input_GFS_v15p2_saYSU.nml",
-                            "SCM_GFS_v15p2_ACM":"input_GFS_v15p2_ACM.nml"
+                            "SCM_GFS_v15p2_ACM":"input_GFS_v15p2_ACM.nml",
+                            "SCM_NSSL_v0":"input_GSD_NSSL_v0.nml"
                             }

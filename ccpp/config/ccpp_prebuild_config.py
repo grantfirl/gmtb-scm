@@ -319,9 +319,9 @@ OPTIONAL_ARGUMENTS = {
          },
     'mp_nsslg' : {
          'mp_nsslg_run' : [
-           'mean_effective_radius_for_liquid_cloud',
-           'mean_effective_radius_for_ice_cloud',
-           'mean_effective_radius_for_snow_flake',
+           'effective_radius_of_stratiform_cloud_liquid_water_particle_in_um',
+           'effective_radius_of_stratiform_cloud_ice_particle_in_um',
+           'effective_radius_of_stratiform_cloud_snow_particle_in_um',
              ],
          },
     #'subroutine_name_1' : 'all',

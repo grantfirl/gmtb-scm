@@ -10,5 +10,6 @@ default_tracers = {"SCM_GFS_v15p2":"tracers_gfdlmp.txt",
                    "SCM_GSD_v1":"tracers_gsd.txt",
                    "SCM_GFS_v15p2_YSU":"tracers_gfdlmp.txt",
                    "SCM_GFS_v15p2_saYSU":"tracers_gfdlmp.txt",
-                   "SCM_GFS_v15p2_ACM":"tracers_gfdlmp.txt"
+                   "SCM_GFS_v15p2_ACM":"tracers_gfdlmp.txt",
+                   "SCM_NSSL_v0":"tracers_nssl.txt"
                   }
