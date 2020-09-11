@@ -151,6 +151,7 @@ SCHEME_FILES = [
     'ccpp/physics/physics/mp_thompson_pre.F90'              ,
     'ccpp/physics/physics/mp_thompson.F90'                  ,
     'ccpp/physics/physics/mp_thompson_post.F90'             ,
+    'ccpp/physics/physics/mp_nsslg.F90'                     ,
     'ccpp/physics/physics/ozphys.f'                         ,
     'ccpp/physics/physics/ozphys_2015.f'                    ,
     'ccpp/physics/physics/precpd.f'                         ,
@@ -315,7 +316,14 @@ OPTIONAL_ARGUMENTS = {
              'RRTMGP_jacobian_of_lw_flux_profile_upward',
              'RRTMGP_lw_flux_profile_upward_allsky',
              ],
-         }, 
+         },
+    'mp_nsslg' : {
+         'mp_nsslg_run' : [
+           'mean_effective_radius_for_liquid_cloud',
+           'mean_effective_radius_for_ice_cloud',
+           'mean_effective_radius_for_snow_flake',
+             ],
+         },
     #'subroutine_name_1' : 'all',
     #'subroutine_name_2' : 'none',
     #'subroutine_name_2' : [ 'var1', 'var3'],
