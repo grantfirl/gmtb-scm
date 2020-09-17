@@ -893,7 +893,11 @@ module gmtb_scm_type_defs
       physics%Stateout%gq0 => scm_state%state_tracer(:,:,:,1)
     endif
 
-    physics%Sfcprop%zorl => scm_state%sfc_roughness_length_cm
+    physics%Sfcprop%zorl  => scm_state%sfc_roughness_length_cm
+    physics%Sfcprop%zorll = scm_state%sfc_roughness_length_cm
+    physics%Sfcprop%zorlo = scm_state%sfc_roughness_length_cm
+    physics%Sfcprop%zorli = scm_state%sfc_roughness_length_cm
+    physics%Sfcprop%zorlw = scm_state%sfc_roughness_length_cm
     if(scm_state%sfc_flux_spec) then
       physics%Sfcprop%spec_sh_flux => scm_state%sh_flux
       physics%Sfcprop%spec_lh_flux => scm_state%lh_flux
