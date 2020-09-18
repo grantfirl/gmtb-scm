@@ -236,9 +236,13 @@ begin
   w_ls = new((/ dimsizes(levels),dimsizes(time) /),float)
   do i=0,dimsizes(levels)-1,1
     do j=0,dimsizes(time)-1,1
-      w_ls(i,j) = -omega(i,j) / (rho(i)*g)
+      w_ls(i,j) = omega(i,j) / (rho(i)*g)
+      if (.not. ismissing(w_ls(i,j)) .and. w_ls(i,j) .ne. 0.) then
+        w_ls(i,j) = w_ls(i,j) * -1.
+      end if
     end do
   end do
+
   w_ls@long_name = "large scale vertical velocity"
   w_ls@units     = "m s^-1"
 
@@ -281,6 +285,35 @@ begin
   u_g@units     = "m s^-1"
   v_g@unit      = "m s^-1"
 
+; Horizontal temperature tendency due to advection, which can be converted to 
+; thetail tendency. The values are give; between 200-1000m, decreasing 
+; to zero down towards the surface and decreasing to zero from 1000m to 
+; 1500m, with zero entirely above. Once again, there needs to be 
+; interpolation in time and with height.
+  T_advec_spec = (/ -2.5e-5,7.5e-5,   0.,   0. /)
+  T_advec_time = (/       0, 46800,64800,86400 /)
+  T_advec      = linint1(T_advec_time,T_advec_spec,False,time,0)
+
+; Interpolate with height
+  h_advec_T  = new((/ dimsizes(levels),dimsizes(time) /),float)
+  h_advec_h   = (/ 0., 200., 1000., 1500., 50000. /)
+  T_advec_int = new((/ dimsizes(h_advec_h),dimsizes(time) /),float)
+
+  do i=0,dimsizes(time)-1,1
+    T_advec_int(:,i) = (/ 0.,T_advec(i),T_advec(i),0.,0. /)
+    h_advec_T(:,i)   = linint1(h_advec_h,T_advec_int(:,i),False,height,0)
+  end do
+
+; Covert to theta_il
+  h_advec_thetail = new((/ dimsizes(levels),dimsizes(time) /),float)
+  do i=0,dimsizes(levels)-1,1
+    h_advec_thetail(i,:) = h_advec_T(i,:) * ((P0 / levels(i))^(kappa))
+  end do
+
+  h_advec_thetail@long_name = "prescribed theta_il tendency due to "+ \
+                              "horizontal advection"
+  h_advec_thetail@units     = "K s^-1"
+
 ; The last remaining variable given in the data that the gmtb-scm can 
 ; use is horizontal specific humidity tendency. The values are given 
 ; between 200-1000m, decreasing to zero down towards the surface and
@@ -292,7 +325,7 @@ begin
 
 ; Interpolate with height
   h_advec_qt  = new((/ dimsizes(levels),dimsizes(time) /),float)
-  h_advec_h   = (/ 0., 200., 1000., 1500., 50000. /)
+;  h_advec_h   = (/ 0., 200., 1000., 1500., 50000. /)
   h_advec_int = new((/ dimsizes(h_advec_h),dimsizes(time) /),float)
 
   do i=0,dimsizes(time)-1,1
@@ -360,12 +393,12 @@ begin
   dT_dt_rad@long_name = "prescribed radiative heating rate"
   dT_dt_rad@units     = "K s^-1"
 
-  h_advec_thetail           = new((/ dimsizes(levels),dimsizes(time) /), \
-                              float)
-  h_advec_thetail           = 0.
-  h_advec_thetail@long_name = "prescribed theta_il tendency due to " + \
-                              "horizontal advection"
-  h_advec_thetail@units     = "K s^-1"
+;  h_advec_thetail           = new((/ dimsizes(levels),dimsizes(time) /), \
+;                              float)
+;  h_advec_thetail           = 0.
+;  h_advec_thetail@long_name = "prescribed theta_il tendency due to " + \
+;                              "horizontal advection"
+;  h_advec_thetail@units     = "K s^-1"
 
   v_advec_thetail           = new((/ dimsizes(levels),dimsizes(time) /), \
                               float)
@@ -384,7 +417,8 @@ begin
   vegsrc = 1
   vegsrc@long_name = "vegetation soure (1-2)"
   
-  vegtyp = 10 ;corresponds to the "grasslands" type for the IGBP (vegsrc=1) dataset
+  vegtyp = 10 ;corresponds to the "grasslands" type for the IGBP (vegsrc=1) 
+              ;dataset
   vegtyp@long_name = "vegetation type (1-12)"
 
   soiltyp = 12 ;corresponds to "clay" soil type
@@ -393,7 +427,9 @@ begin
   slopetyp = 1
   slopetyp@long_name = "slope type (1-9)"
   
-  vegfrac = 0.769999980926514 ;the value of 100% specified in the case specifications clashes with the maximum value for this gridpoint from UFS ICs
+  vegfrac = 0.769999980926514 ; the value of 100% specified in the case 
+                              ; specifications clashes with the maximum value
+                              ; for this gridpoint from UFS ICs
   vegfrac@long_name = "vegetation fraction"
   
   shdmin = 0.216057792305946
