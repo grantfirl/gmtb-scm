@@ -12,6 +12,7 @@ import math
 import f90nml
 import re
 import fv3_remap
+from pandas import *
 
 ###############################################################################
 # Global settings                                                             #
@@ -25,6 +26,7 @@ cp           = 1004.6
 zvir         = rvgas/rdgas - 1.
 rocp         = rdgas/cp
 grav         = 9.80665
+deg_to_rad   = math.pi/180.0
 
 missing_value = 9.99e20
 
@@ -211,8 +213,8 @@ def find_loc_indices(loc, dir, tile):
     
     nc_file = Dataset('{0}/{1}'.format(dir,filename))
     #read in supergrid longitude and latitude
-    lon_super = np.array(nc_file['x'])   #[lat,lon] or [y,x]   #.swapaxes(0,1)
-    lat_super = np.array(nc_file['y'])    #[lat,lon] or [y,x]   #.swapaxes(0,1)
+    lon_super = np.array(nc_file['x']).swapaxes(0,1)   #[lat,lon] or [y,x]   #
+    lat_super = np.array(nc_file['y']).swapaxes(0,1)    #[lat,lon] or [y,x]   #
     #get the longitude and latitude data for the grid centers by slicing the supergrid 
     #and taking only odd-indexed values
     longitude = lon_super[1::2,1::2]
@@ -247,6 +249,9 @@ def find_loc_indices(loc, dir, tile):
     #get the indices of the grid point with the minimum euclidean distance to the given point
     i,j = np.unravel_index(eucl_dist.argmin(), eucl_dist.shape)
     
+    #print i,j,longitude[i,j]%360.0, latitude[i,j], eucl_dist[i,j]
+    #exit()
+    
     return (i,j,longitude[i,j]%360.0, latitude[i,j], eucl_dist[i,j])
 
 def find_lon_lat_of_indices(indices, dir, tile):
@@ -263,15 +268,15 @@ def find_lon_lat_of_indices(indices, dir, tile):
     
     nc_file = Dataset('{0}/{1}'.format(dir,filename))
     #read in supergrid longitude and latitude
-    lon_super = np.array(nc_file['x'])   #[lat,lon] or [y,x]   #.swapaxes(0,1)
-    lat_super = np.array(nc_file['y'])    #[lat,lon] or [y,x]   #.swapaxes(0,1)
+    lon_super = np.array(nc_file['x']).swapaxes(0,1)   #[lat,lon] or [y,x]   #
+    lat_super = np.array(nc_file['y']).swapaxes(0,1)    #[lat,lon] or [y,x]   #
     #get the longitude and latitude data for the grid centers by slicing the supergrid 
     #and taking only odd-indexed values
     longitude = lon_super[1::2,1::2]
     latitude = lat_super[1::2,1::2]
     nc_file.close()
     
-    return (longitude[indices[1],indices[0]], latitude[indices[1],indices[0]])
+    return (longitude[indices[0],indices[1]], latitude[indices[0],indices[1]])
     
 def sph2cart(az, el, r):
     """Calculate the Cartesian coordiates from spherical coordinates"""
@@ -283,101 +288,719 @@ def sph2cart(az, el, r):
     
     return (x, y, z)    
 
-def get_UFS_IC_data(dir, tile, i, j, old_chgres):
+def get_UFS_IC_data(dir, forcing_dir, tile, i, j, old_chgres):
     """Get the state, surface, and orographic data for the given tile and indices"""
     #returns dictionaries with the data
     
-    state_data = get_UFS_state_data(dir, tile, i, j, old_chgres)
+    vgrid_data = get_UFS_vgrid_data(dir) #reads gfs_ctrl.nc (has vertical levels)
+    state_data = get_UFS_state_data(vgrid_data, dir, forcing_dir, tile, i, j, old_chgres)
     surface_data = get_UFS_surface_data(dir, tile, i, j, old_chgres)
     oro_data = get_UFS_oro_data(dir, tile, i, j)
-    vgrid_data = get_UFS_vgrid_data(dir) #only needed for ak, bk to calculate pressure
     
-    #calculate derived quantities
-    if old_chgres:
-        #temperature
-        nlevs = state_data["nlevs"]
-        gz=state_data["z"]*grav
-        pn1=np.zeros([nlevs+1])
-        temp=np.zeros([nlevs])
-        for k in range(nlevs+1):
-          pn1[k]=np.log(vgrid_data["ak"][k]+state_data["p_surf"]*vgrid_data["bk"][k])
-        for k in range(nlevs):
-          temp[k] = (gz[k]-gz[k+1])/( rdgas*(pn1[k+1]-pn1[k])*(1.+zvir*state_data["qv"][k]) )
-        state_data["T"] = temp
-        state_data["pres"] = np.exp(pn1[0:nlevs])
+    # #calculate derived quantities
+    # if old_chgres:
+    #     #temperature
+    #     nlevs = state_data["nlevs"]
+    #     gz=state_data["z"]*grav
+    #     pn1=np.zeros([nlevs+1])
+    #     temp=np.zeros([nlevs])
+    #     for k in range(nlevs+1):
+    #       pn1[k]=np.log(vgrid_data["ak"][k]+state_data["p_surf"]*vgrid_data["bk"][k])
+    #     for k in range(nlevs):
+    #       temp[k] = (gz[k]-gz[k+1])/( rdgas*(pn1[k+1]-pn1[k])*(1.+zvir*state_data["qv"][k]) )
+    #     state_data["T"] = temp
+    #     state_data["pres"] = np.exp(pn1[0:nlevs])
     
     print "qv = ",state_data["qv"]
+    print len(state_data["qv"])
     
     return (state_data, surface_data, oro_data)
     
-def get_UFS_state_data(dir, tile, i, j, old_chgres):
+def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
     """Get the state data for the given tile and indices"""
     
-    nc_file = Dataset('{0}/{1}'.format(dir,'gfs_data.tile{0}.nc'.format(tile)))
+    filename_pattern = '*grid.tile*.nc'
+    
+    #find all supergrid files in the directory
+    grid_fnames = []
+    for f_name in os.listdir(dir):
+       if fnmatch.fnmatch(f_name, filename_pattern):
+          grid_fnames.append(f_name)
+    if not grid_fnames:
+        message = 'No filenames matching the pattern {0} found in {1}'.format(filename_pattern,dir)
+        logging.critical(message)
+        raise Exception(message)
+    
+    for f_name in grid_fnames:
+        nc_file = Dataset('{0}/{1}'.format(dir,f_name))
+        lon_super = np.array(nc_file['x']).swapaxes(0,1)
+        lat_super = np.array(nc_file['y']).swapaxes(0,1)
+        nc_file.close()
+        stride = 32
+        lon_super_reduced = lon_super[0::stride,0::stride]
+        lat_super_reduced = lat_super[0::stride,0::stride]
+        print f_name
+        print DataFrame(lon_super_reduced)
+        print DataFrame(lat_super_reduced)
+        #for i in range(0, lon_super_reduced.shape[0]):
+        #    print i, lon_super_reduced[i,:]
+        #print lon_super_reduced
+        #print lat_super_reduced
+        #for j in range(0, longitude.shape[0]):
+        #    for i in range(0, longitude.shape[1]):
+        #        print longitude[j,i]
+        
+    
+    
+    nc_file_data = Dataset('{0}/{1}'.format(dir,'gfs_data.tile{0}.nc'.format(tile)))
     
     #the majority of this routine is from Phil Pegion (NOAA PSD)
     
-    # assume model contains one less level than the cold start spectral GFS initial conditions
-    nlevs=len(nc_file.dimensions['lev'])-1
+    # get nlevs from the gfs_ctrl.nc data
+    nlevs_model=vgrid["nlevs"]
     
-    # upper air fields from initial conditions
-    zh=nc_file['zh'][::-1,j,i]
-    uw1=nc_file['u_w'][::-1,j,i]
-    uw2=nc_file['u_w'][::-1,j,i+1]
-    us1=nc_file['u_s'][::-1,j,i]
-    us2=nc_file['u_s'][::-1,j+1,i]
-    vw1=nc_file['v_w'][::-1,j,i]
-    vw2=nc_file['v_w'][::-1,j,i+1]
-    vs1=nc_file['v_s'][::-1,j,i]
-    vs2=nc_file['v_s'][::-1,j+1,i]
-    ucomp=0.25*(uw1+uw2+us1+us2)  # estimate u winds on the A grid
-    vcomp=0.25*(vw1+vw2+vs1+vs2)  # estimate v winds on the A grid
-    sphum=nc_file['sphum'][::-1,j,i]
+    # upper air fields from initial conditions (all data are top-first)
+    zh_rev=nc_file_data['zh'][:,j,i]
+    sphum_rev=nc_file_data['sphum'][:,j,i]
     # o3 and qv are taken from ics. 
-    o3=nc_file['o3mr'][::-1,j,i]
-    liqwat=nc_file['liq_wat'][::-1,j,i]
-
-    # surface pressure
-    ps=nc_file['ps'][j,i]
-    
-    if not old_chgres:
-        #gfs_data.tileX.nc files created from chgres_cube already containt temperature and pressure profiles(well, surface pressure and delp); use those
-        #older version of global_chgres did not include these vars
-        t = nc_file['t'][::-1,j,i]
-        delp = nc_file['delp'][::-1,j,i]
+    o3_rev=nc_file_data['o3mr'][:,j,i]
+    liqwat_rev=nc_file_data['liq_wat'][:,j,i]
+    ps_data = nc_file_data['ps'][j,i]
         
-        p = np.zeros(nlevs)
-        p[0] = ps
-        for k in range(1, nlevs):
-            p[k] = p[k-1] - delp[k-1]
-        
-    nc_file.close()
+    #The 3D fields above are apparently on grid vertical interfaces. In the file external_ic.F90/get_nggps_ic subroutine in FV3, these fields
+    #are further processed to get to the vertical grid centers/means.
     
-    #put data in a dictionary
+    # following remap_scalar_nggps in external_ic.F90
+    levp_data = len(sphum_rev)
+    
+    ak_rev = vgrid["ak"][::-1]
+    bk_rev = vgrid["bk"][::-1]
+    ak_rev[0] = np.max([1.0E-9, ak_rev[0]])
+    
+    ptop_data = ak_rev[1]
+            
+    pressure_from_data_rev = ak_rev + bk_rev*ps_data
+    log_pressure_from_data_rev = np.log(pressure_from_data_rev)
+    
+    gz_rev = np.zeros(2*levp_data +1)
+    pn_rev = np.zeros(2*levp_data +1)
+        
+    gz_rev[0:levp_data+1] = zh_rev*grav
+    pn_rev[0:levp_data+1] = log_pressure_from_data_rev
+    k2 = np.max([10, levp_data/2])
+    for k in range(levp_data+1,levp_data+k2-1):
+        #do k=km+2, km+k2
+        l = 2*(levp_data+1) - k
+        gz_rev[k] = 2.*gz_rev[levp_data+1] - gz_rev[l]
+        pn_rev[k] = 2.*pn_rev[levp_data+1] - pn_rev[l]
+    
+    phis = zh_rev[levp_data]*grav
+    
+    for k in range(levp_data+k2-2,0,-1):
+        #do k=km+k2-1, 2, -1
+        if (phis <= gz_rev[k] and phis >= gz_rev[k+1]):
+            log_ps_calc = pn_rev[k] + (pn_rev[k+1]-pn_rev[k])*(gz_rev[k]-phis)/(gz_rev[k]-gz_rev[k+1])
+            break
+    ps_calc = np.exp(log_ps_calc)
+        
+    pressure_model_interfaces_rev = np.zeros(nlevs_model+1)
+    log_pressure_model_interfaces_rev = np.zeros(nlevs_model+1)
+    pressure_model_interfaces_rev[0] = ak_rev[1]
+    log_pressure_model_interfaces_rev[0] = np.log(pressure_model_interfaces_rev[0])
+    for k in range(1,nlevs_model+1):
+        pressure_model_interfaces_rev[k] = ak_rev[k+1] + bk_rev[k+1]*ps_calc
+        log_pressure_model_interfaces_rev[k] = np.log(pressure_model_interfaces_rev[k])
+    
+    pressure_thickness_model_rev = np.zeros(nlevs_model)
+    for k in range(0,nlevs_model):
+        pressure_thickness_model_rev[k] = pressure_model_interfaces_rev[k+1] - pressure_model_interfaces_rev[k]
+    
+    sphum_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], sphum_rev[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, 0, 8, ptop_data)
+    sphum_model_rev_3d = fv3_remap.fillq(1, nlevs_model, 1, np.expand_dims(sphum_model_rev, axis=2), pressure_thickness_model_rev[np.newaxis, :])
+    sphum_model_rev = sphum_model_rev_3d[:,:,0]
+    
+    o3_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], o3_rev[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, 0, 8, ptop_data)
+    liqwat_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], liqwat_rev[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, 0, 8, ptop_data)
+    
     if old_chgres:
-        state = {
-            "nlevs": nlevs,
-            "z": zh,
-            "u": ucomp,
-            "v": vcomp,
-            "qv": sphum,
-            "o3": o3,
-            "ql": liqwat,
-            "p_surf": ps
-        }
+        gz_fv = np.zeros(nlevs_model+1)
+        gz_fv[-1] = phis
+        m = 0
+        for k in range(0,nlevs_model):
+            for l in range(m, levp_data+k2-1):
+                if ( (log_pressure_model_interfaces_rev[k] <= pn_rev[l+1]) and (log_pressure_model_interfaces_rev[k] >= pn_rev[l]) ):
+                    gz_fv[k] = gz_rev[l] + (gz_rev[l+1]-gz_rev[l])*(log_pressure_model_interfaces_rev[k]-pn_rev[l])/(pn_rev[l+1]-pn_rev[l])
+                    break
+            m = l
+        
+        temp_model_rev = np.zeros(nlevs_model)
+        for k in range(0, nlevs_model):
+            temp_model_rev[k] = (gz_fv[k]-gz_fv[k+1])/(rdgas*(log_pressure_model_interfaces_rev[k+1]-log_pressure_model_interfaces_rev[k])*(1.+zvir*sphum_model_rev[0,k]) )
     else:
-        state = {
-            "nlevs": nlevs,
-            "z": zh,
-            "u": ucomp,
-            "v": vcomp,
-            "qv": sphum,
-            "o3": o3,
-            "ql": liqwat,
-            "p_surf": ps,
-            "T": t,
-            "pres": p
-        }
+        temp_rev = nc_file_data['t'][:,j,i]
+        
+        temp_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], temp_rev[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, 2, 4, ptop_data)
+        
+    
+    icewat_rev = np.zeros(nlevs_model)
+    all_liquid_threshold = 273.16
+    all_ice_threshold = 233.16
+    intermediate_threshold = 258.16
+    cloud_ice_mixing_ratio_threshold = 1.0E-5
+    for k in range(0, nlevs_model):
+        cloud_water = liqwat_rev[k]
+        if (temp_model_rev[k] > all_liquid_threshold):
+            liqwat_rev[k] = cloud_water
+            icewat_rev[k] = 0.0
+        elif (temp_model_rev[k] < all_ice_threshold):
+            liqwat_rev[k] = 0.0
+            icewat_rev[k] = cloud_water
+        else:
+            if k == 0:
+                liqwat_rev[k] = cloud_water*(temp_model_rev[k]-all_ice_threshold)/(all_liquid_threshold - all_ice_threshold)
+                icewat_rev[k] = cloud_water - liqwat_rev[k]
+            else:
+                if (temp_model_rev[k] < intermediate_threshold and icewat_rev[k-1] > cloud_ice_mixing_ratio_threshold):
+                    liqwat_rev[k] = 0.0
+                    icewat_rev[k] = cloud_water
+                else:
+                    liqwat_rev[k] = cloud_water*(temp_model_rev[k]-all_ice_threshold)/(all_liquid_threshold - all_ice_threshold)
+                    icewat_rev[k] = cloud_water - liqwat_rev[k]
+        (liqwat_rev[k], dummy_rain, icewat_rev[k], dummy_snow) = fv3_remap.mp_auto_conversion(liqwat_rev[k], icewat_rev[k])
+    
+    filename_pattern = '*grid.tile{0}.nc'.format(tile)
+    
+    for f_name in os.listdir(dir):
+       if fnmatch.fnmatch(f_name, filename_pattern):
+          filename = f_name
+    if not filename:
+        message = 'No filenames matching the pattern {0} found in {1}'.format(filename_pattern,dir)
+        logging.critical(message)
+        raise Exception(message)
+    
+    u_s = nc_file_data['u_s'][:,:,:].swapaxes(1,2)
+    v_s = nc_file_data['v_s'][:,:,:].swapaxes(1,2)
+    u_w = nc_file_data['u_w'][:,:,:].swapaxes(1,2)
+    v_w = nc_file_data['v_w'][:,:,:].swapaxes(1,2)
+    
+    print u_s.shape, v_s.shape
+    print u_w.shape, v_w.shape
+    
+    
+    nc_file_grid = Dataset('{0}/{1}'.format(dir,filename))
+    nc_file_sfc = Dataset('{0}/{1}'.format(dir,'sfc_data.tile{0}.nc'.format(tile)))
+        
+    #read in supergrid longitude and latitude
+    lon_super = np.array(nc_file_grid['x']).swapaxes(0,1)   #[lat,lon] or [y,x]   #.swapaxes(0,1)
+    lat_super = np.array(nc_file_grid['y']).swapaxes(0,1)    #[lat,lon] or [y,x]   #.swapaxes(0,1)
+    
+    num_agrid_x = int(0.5*(lon_super.shape[0]-1))
+    num_agrid_y = int(0.5*(lon_super.shape[1]-1))
+        
+    # dgrid = np.zeros((2, num_agrid_x+1, num_agrid_y+1))
+    # for m in range(0, num_agrid_x+1):
+    #     for n in range(0, num_agrid_y+1):
+    #         dgrid[0,m,n] = lon_super[2*m,2*n]
+    #         dgrid[1,m,n] = lat_super[2*m,2*n]
+    # for m in range(0, num_agrid_x):
+    #     print m, dgrid[0,m,0], dgrid[0,m+1,0]
+    
+    #p1 = np.asarray((dgrid[0,i,j],dgrid[1,i,j]))
+    #p2 = np.asarray((dgrid[0,i+1,j],dgrid[1,i+1,j]))
+    
+    #find orientation
+    #A-grid point
+    agrid_super_i_index = 2*i + 1
+    agrid_super_j_index = 2*j + 1
+    point_on_agrid = np.asarray((lon_super[agrid_super_i_index,agrid_super_j_index],lat_super[agrid_super_i_index,agrid_super_j_index]))
+    
+    test_dgrid_points = [(lon_super[agrid_super_i_index+1,agrid_super_j_index],lat_super[agrid_super_i_index+1,agrid_super_j_index]),\
+                         (lon_super[agrid_super_i_index-1,agrid_super_j_index],lat_super[agrid_super_i_index-1,agrid_super_j_index]),\
+                         (lon_super[agrid_super_i_index,agrid_super_j_index+1],lat_super[agrid_super_i_index,agrid_super_j_index+1]),\
+                         (lon_super[agrid_super_i_index,agrid_super_j_index-1],lat_super[agrid_super_i_index,agrid_super_j_index-1])]
+    
+    test_lon_diff = [p[0] - point_on_agrid[0] for p in test_dgrid_points]
+    test_lat_diff = [p[1] - point_on_agrid[1] for p in test_dgrid_points]
+    
+    east_test_point = np.argmax(test_lon_diff)
+    north_test_point = np.argmax(test_lat_diff)
+    
+    print 'east test point=',east_test_point
+    print 'north_test_point=',north_test_point
+    
+    if east_test_point == 0:
+        #longitude increases most along the positive i axis
+        if north_test_point == 2:
+            #latitude increases most along the positive j axis
+            #     ---> j+ north
+            #     |
+            #     V
+            #     i+ east
+            
+            #calculation of zonal wind on first (south) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*(i+1),2*j],lat_super[2*(i+1),2*j]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_s = nc_file_data['u_s'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on second (north) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*(j+1)],lat_super[2*i,2*(j+1)]))
+            p2 = np.asarray((lon_super[2*(i+1),2*(j+1)],lat_super[2*(i+1),2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_n = nc_file_data['u_s'][:,j+1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j+1,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            u_agrid_rev = 0.5*(u_s + u_n)
+            
+            #calculation of meridionial wind on first (west) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*i,2*(j+1)],lat_super[2*i,2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_w = nc_file_data['u_w'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of meridionial wind on second (east) D-grid point
+            p1 = np.asarray((lon_super[2*(i+1),2*j],lat_super[2*(i+1),2*j]))
+            p2 = np.asarray((lon_super[2*(i+1),2*(j+1)],lat_super[2*(i+1),2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_e = nc_file_data['u_w'][:,j,i+1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i+1]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            v_agrid_rev = 0.5*(v_w + v_e)
+        elif north_test_point == 3:
+            #latitude increases most along the negative j axis
+            # <--- j- north
+            #    |
+            #    V
+            #    i+ east
+            #calculation of zonal wind on first (south) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*(i+1),2*j],lat_super[2*(i+1),2*j]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_s = nc_file_data['u_s'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on second (north) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*(j-1)],lat_super[2*i,2*(j-1)]))
+            p2 = np.asarray((lon_super[2*(i+1),2*(j-1)],lat_super[2*(i+1),2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_n = nc_file_data['u_s'][:,j-1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j-1,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            u_agrid_rev = 0.5*(u_s + u_n)
+            
+            #calculation of meridionial wind on first (west) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*i,2*(j-1)],lat_super[2*i,2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_w = nc_file_data['u_w'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of meridionial wind on second (east) D-grid point
+            p1 = np.asarray((lon_super[2*(i+1),2*j],lat_super[2*(i+1),2*j]))
+            p2 = np.asarray((lon_super[2*(i+1),2*(j-1)],lat_super[2*(i+1),2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_e = nc_file_data['u_w'][:,j,i+1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i+1]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            v_agrid_rev = 0.5*(v_w + v_e)
+        else:
+            print 'unknown grid orientation'
+    elif east_test_point == 1:
+        #longitude increases most along the negative i axis
+        if north_test_point == 2:
+            #latitude increases most along the positive j axis
+            #     i- east
+            #     ^
+            #     |
+            #     ---> j+ north
+            #calculation of zonal wind on first (south) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*(i-1),2*j],lat_super[2*(i-1),2*j]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_s = nc_file_data['u_s'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on second (north) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*(j+1)],lat_super[2*i,2*(j+1)]))
+            p2 = np.asarray((lon_super[2*(i-1),2*(j+1)],lat_super[2*(i-1),2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_n = nc_file_data['u_s'][:,j+1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j+1,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            u_agrid_rev = 0.5*(u_s + u_n)
+            
+            #calculation of meridionial wind on first (west) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*i,2*(j+1)],lat_super[2*i,2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_w = nc_file_data['u_w'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of meridionial wind on second (east) D-grid point
+            p1 = np.asarray((lon_super[2*(i-1),2*j],lat_super[2*(i-1),2*j]))
+            p2 = np.asarray((lon_super[2*(i-1),2*(j+1)],lat_super[2*(i-1),2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_e = nc_file_data['u_w'][:,j,i-1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i-1]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            v_agrid_rev = 0.5*(v_w + v_e)
+        elif north_test_point == 3:
+            #latitude increases most along the negative j axis
+            #     i- east
+            #     ^
+            #     |
+            # <--- j- north
+            #calculation of zonal wind on first (south) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*(i-1),2*j],lat_super[2*(i-1),2*j]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_s = nc_file_data['u_s'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on second (north) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*(j-1)],lat_super[2*i,2*(j-1)]))
+            p2 = np.asarray((lon_super[2*(i-1),2*(j-1)],lat_super[2*(i-1),2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_n = nc_file_data['u_s'][:,j-1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j-1,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            u_agrid_rev = 0.5*(u_s + u_n)
+            
+            #calculation of meridionial wind on first (west) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*i,2*(j-1)],lat_super[2*i,2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_w = nc_file_data['u_w'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of meridionial wind on second (east) D-grid point
+            p1 = np.asarray((lon_super[2*(i-1),2*j],lat_super[2*(i-1),2*j]))
+            p2 = np.asarray((lon_super[2*(i-1),2*(j-1)],lat_super[2*(i-1),2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_e = nc_file_data['u_w'][:,j,i-1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i-1]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            v_agrid_rev = 0.5*(v_w + v_e)
+        else:
+            print 'unknown grid orientation'
+    elif east_test_point == 2:
+        #longitude increases most along the positive j axis
+        if north_test_point == 0:
+            #latitude increases most along the positive i axis
+            #     ---> j+ east
+            #     |
+            #     V
+            #     i+ north
+            #calculation of zonal wind on first (south) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*i,2*(j+1)],lat_super[2*i,2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_s = nc_file_data['u_s'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on second (north) D-grid point
+            p1 = np.asarray((lon_super[2*(i+1),2*j],lat_super[2*(i+1),2*j]))
+            p2 = np.asarray((lon_super[2*(i+1),2*(j+1)],lat_super[2*(i+1),2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_n = nc_file_data['u_s'][:,j,i+1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i+1]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            u_agrid_rev = 0.5*(u_s + u_n)
+            
+            #calculation of meridionial wind on first (west) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*(i+1),2*j],lat_super[2*(i+1),2*j]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_w = nc_file_data['u_w'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of meridionial wind on second (east) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*(j+1)],lat_super[2*i,2*(j+1)]))
+            p2 = np.asarray((lon_super[2*(i+1),2*(j+1)],lat_super[2*(i+1),2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_e = nc_file_data['u_w'][:,j+1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j+1,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            v_agrid_rev = 0.5*(v_w + v_e)
+        elif north_test_point == 1:
+            #latitude increases most along the negative i axis
+            #     i- north
+            #     ^
+            #     |
+            #     ---> j+ east
+            #calculation of zonal wind on first (south) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*i,2*(j+1)],lat_super[2*i,2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_s = nc_file_data['u_s'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on second (north) D-grid point
+            p1 = np.asarray((lon_super[2*(i-1),2*j],lat_super[2*(i-1),2*j]))
+            p2 = np.asarray((lon_super[2*(i-1),2*(j+1)],lat_super[2*(i-1),2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_n = nc_file_data['u_s'][:,j,i-1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i-1]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            u_agrid_rev = 0.5*(u_s + u_n)
+            
+            #calculation of meridionial wind on first (west) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*(i-1),2*j],lat_super[2*(i-1),2*j]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_w = nc_file_data['u_w'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of meridionial wind on second (east) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*(j+1)],lat_super[2*i,2*(j+1)]))
+            p2 = np.asarray((lon_super[2*(i-1),2*(j+1)],lat_super[2*(i-1),2*(j+1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_e = nc_file_data['u_w'][:,j+1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j+1,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            v_agrid_rev = 0.5*(v_w + v_e)
+        else:
+            print 'unknown grid orientation'
+    elif east_test_point == 3:
+        #longitude increases most along the negative j axis
+        if north_test_point == 0:
+            #latitude increases most along the positive i axis
+            # <--- j- east
+            #    |
+            #    V
+            #    i+ north
+            #calculation of zonal wind on first (south) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*i,2*(j-1)],lat_super[2*i,2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_s = nc_file_data['u_s'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on second (north) D-grid point
+            p1 = np.asarray((lon_super[2*(i+1),2*j],lat_super[2*(i+1),2*j]))
+            p2 = np.asarray((lon_super[2*(i+1),2*(j-1)],lat_super[2*(i+1),2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_n = nc_file_data['u_s'][:,j,i+1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i+1]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            u_agrid_rev = 0.5*(u_s + u_n)
+            
+            #calculation of meridionial wind on first (west) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*(i+1),2*j],lat_super[2*(i+1),2*j]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_w = nc_file_data['u_w'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of meridionial wind on second (east) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*(j-1)],lat_super[2*i,2*(j-1)]))
+            p2 = np.asarray((lon_super[2*(i+1),2*(j-1)],lat_super[2*(i+1),2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_e = nc_file_data['u_w'][:,j-1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j-1,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            v_agrid_rev = 0.5*(v_w + v_e)
+        elif north_test_point == 1:
+            #latitude increases most along the negative i axis
+            #     i- north
+            #     ^
+            #     |
+            # <--- j- east
+            #calculation of zonal wind on first (south) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*i,2*(j-1)],lat_super[2*i,2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_s = nc_file_data['u_s'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on second (north) D-grid point
+            p1 = np.asarray((lon_super[2*(i-1),2*j],lat_super[2*(i-1),2*j]))
+            p2 = np.asarray((lon_super[2*(i-1),2*(j-1)],lat_super[2*(i-1),2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            u_n = nc_file_data['u_s'][:,j,i-1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i-1]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            u_agrid_rev = 0.5*(u_s + u_n)
+            
+            #calculation of meridionial wind on first (west) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
+            p2 = np.asarray((lon_super[2*(i-1),2*j],lat_super[2*(i-1),2*j]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_w = nc_file_data['u_w'][:,j,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of meridionial wind on second (east) D-grid point
+            p1 = np.asarray((lon_super[2*i,2*(j-1)],lat_super[2*i,2*(j-1)]))
+            p2 = np.asarray((lon_super[2*(i-1),2*(j-1)],lat_super[2*(i-1),2*(j-1)]))
+            p3 = fv3_remap.mid_pt_sphere(p1*deg_to_rad, p2*deg_to_rad)
+            e1 = fv3_remap.get_unit_vect2(p1*deg_to_rad, p2*deg_to_rad)
+            (ex, ey) = fv3_remap.get_latlon_vector(p3)
+            v_e = nc_file_data['u_w'][:,j-1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j-1,i]*fv3_remap.inner_prod(e1, ey)
+            
+            #calculation of zonal wind on A-grid (simple average for now)
+            v_agrid_rev = 0.5*(v_w + v_e)
+        else:
+            print 'unknown grid orientation'
+    
+    print 'u (A-grid)', u_agrid_rev
+    print 'v (A-grid)', v_agrid_rev
+    
+    #STILL NEED TO PUT u,v (A-grid) ON MODEL LAYER CENTERS!!!
+        
+    nc_file_grid.close()
+    nc_file_data.close()
+    nc_file_sfc.close()
+    
+    dyn_filename_pattern = 'dynf*.tile{0}.nc'.format(tile)
+    phy_filename_pattern = 'phyf*.tile{0}.nc'.format(tile)
+    
+    dyn_filenames = []
+    phy_filenames = []
+    for f_name in os.listdir(forcing_dir):
+       if fnmatch.fnmatch(f_name, dyn_filename_pattern):
+          dyn_filenames.append(f_name)
+       if fnmatch.fnmatch(f_name, phy_filename_pattern):
+          phy_filenames.append(f_name)
+    if not dyn_filenames:
+        message = 'No filenames matching the pattern {0} found in {1}'.format(dyn_filename_pattern,dir)
+        logging.critical(message)
+        raise Exception(message)
+    if not phy_filenames:
+        message = 'No filenames matching the pattern {0} found in {1}'.format(phy_filename_pattern,dir)
+        logging.critical(message)
+        raise Exception(message)
+    dyn_filenames = sorted(dyn_filenames)
+    phy_filenames = sorted(phy_filenames)
+    
+    if (len(dyn_filenames) != len(phy_filenames)):
+        message = 'The number of dyn files and phy files in {0} matching the patterns does not match.'.format(dir)
+        logging.critical(message)
+        raise Exception(message)
+    
+    n_files = len(dyn_filenames)
+    
+    u_layers = []
+    v_layers = []
+    time_dyn_hours = []
+    for filename in dyn_filenames:
+        nc_file = Dataset('{0}/{1}'.format(forcing_dir,filename))
+        
+        nlevs=len(nc_file.dimensions['pfull'])
+        
+        u_layers.append(nc_file['ugrd'][0,:,j,i])
+        v_layers.append(nc_file['vgrd'][0,:,j,i])
+            
+        time_dyn_hours.append(nc_file['time'][0])
+        
+        nc_file.close()
+    u_layers = np.asarray(u_layers)
+    v_layers = np.asarray(v_layers)
+    print 'u from dyn file', u_layers[0]
+    print 'v from dyn file',v_layers[0]
+    
+    # if old_chgres: 
+    #      #temperature
+    #      gz=state_data["z"]*grav
+    #      pn1=np.zeros([nlevs+1])
+    #      temp=np.zeros([nlevs])
+    #      for k in range(nlevs+1):
+    #        pn1[k]=np.log(vgrid_data["ak"][k]+state_data["p_surf"]*vgrid_data["bk"][k])
+    #      for k in range(nlevs):
+    #        temp[k] = (gz[k]-gz[k+1])/( rdgas*(pn1[k+1]-pn1[k])*(1.+zvir*state_data["qv"][k]) )
+    #      print temp
+    #      #state_data["T"] = temp
+    #      #state_data["pres"] = np.exp(pn1[0:nlevs])
+    #
+    # else:
+    #     #gfs_data.tileX.nc files created from chgres_cube already containt temperature and pressure profiles(well, surface pressure and delp); use those
+    #     #older version of global_chgres did not include these vars
+    #     t = nc_file['t'][::-1,j,i]
+    # 
+    #     delp = nc_file['delp'][::-1,j,i]
+    # 
+    #     p = np.zeros(nlevs)
+    #     p[0] = ps
+    #     for k in range(1, nlevs):
+    #         p[k] = p[k-1] - delp[k-1]
+            
+    
+
+    exit()
+    
+        
+    #put data in a dictionary
+    # if old_chgres:
+    #     state = {
+    #         "nlevs": nlevs,
+    #         "z": zh,
+    #         "u": ucomp,
+    #         "v": vcomp,
+    #         "qv": sphum,
+    #         "o3": o3,
+    #         "ql": liqwat,
+    #         "p_surf": ps
+    #     }
+    # else:
+    state = {
+        "nlevs": nlevs,
+        "z": zh,
+        "u": ucomp,
+        "v": vcomp,
+        "qv": sphum,
+        "o3": o3,
+        "ql": liqwat,
+        "p_surf": ps,
+        "T": t,
+        "pres": p
+    }
         
     return state
 
@@ -539,14 +1162,20 @@ def get_UFS_vgrid_data(dir):
     nc_file = Dataset('{0}/{1}'.format(dir,'gfs_ctrl.nc'))
     
     # vertical coordinate definition
+    # GJF: it looks like there is an extra level on top that represents 0 Pa, otherwise these values are for vertical grid interfaces
     ak=nc_file['vcoord'][0,::-1]
     bk=nc_file['vcoord'][1,::-1]
+    
+    #GJF: in external_ic.F90, when external_eta is true (which it apparently is for FV3GFS runs), the top value is ignored
+    #ak = ak[0:len(ak)-1]
+    #bk = bk[0:len(bk)-1]
     
     nc_file.close()
     
     vgrid = {
         "ak": ak,
-        "bk": bk
+        "bk": bk,
+        "nlevs": len(ak)-2  #full grid levels are interfaces - 1 and there is an extra level on top (subtract 2)
     }
     
     return vgrid    
@@ -578,7 +1207,7 @@ def get_UFS_grid_area(dir, tile, i, j):
     
     return area_in.sum()
 
-def get_UFS_forcing_data(nlevs, dir, tile, i, j):
+def get_UFS_forcing_data(nlevs, state, dir, tile, i, j):
     """Get the horizontal and vertical advective tendencies for the given tile and indices"""
     
     #Note: this is a placeholder function that sets forcing to 0, but will need to be filled out in the future from custom FV3 output
@@ -602,7 +1231,7 @@ def get_UFS_forcing_data(nlevs, dir, tile, i, j):
         logging.critical(message)
         raise Exception(message)
     dyn_filenames = sorted(dyn_filenames)
-    phy_filenames = sorted(phy_filenames)    
+    phy_filenames = sorted(phy_filenames)
     
     if (len(dyn_filenames) != len(phy_filenames)):
         message = 'The number of dyn files and phy files in {0} matching the patterns does not match.'.format(dir)
@@ -630,11 +1259,11 @@ def get_UFS_forcing_data(nlevs, dir, tile, i, j):
         bk = getattr(nc_file, "bk")[::-1]
     
         ps=nc_file['pressfc'][0,j,i]
-    
+        
         p_interface = np.zeros(nlevs+1)
         for k in range(nlevs+1):
             p_interface[k]=ak[k]+ps*bk[k]
-    
+        
         p_interfaces.append(p_interface)
         
         p_layer = np.zeros(nlevs)
@@ -645,11 +1274,6 @@ def get_UFS_forcing_data(nlevs, dir, tile, i, j):
         
         t_layers.append(nc_file['tmp'][0,::-1,j,i])
         qv_layers.append(nc_file['spfh'][0,::-1,j,i])
-        
-        try:
-            print nc_file['dt3dt_nophys'][0,::-1,j,i]
-        except:
-            print 'dt3dt_nophys not found in ', filename
             
         time_dyn_hours.append(nc_file['time'][0])
         
@@ -662,6 +1286,7 @@ def get_UFS_forcing_data(nlevs, dir, tile, i, j):
 
     tv_layers = t_layers*(1.0 + zvir*qv_layers)
     
+    dt3dt_nophys = []
     dq3dt_nophys = []
     time_phys_hours = []
     for filename in phy_filenames:
@@ -670,13 +1295,21 @@ def get_UFS_forcing_data(nlevs, dir, tile, i, j):
         nlevs=len(nc_file.dimensions['pfull'])
         
         try:
+            dt3dt_nophys.append(nc_file['dt3dt_nophys'][0,::-1,j,i])
+            #dt3dt_nophys.append(nc_file['dt3dt_nophys'][0,:,j,i])
+        except:
+            print 'dt3dt_nophys not found in ', filename
+        
+        try:
             dq3dt_nophys.append(nc_file['dq3dt_nophys'][0,::-1,j,i])
+            #dq3dt_nophys.append(nc_file['dq3dt_nophys'][0,:,j,i])
         except:
             print 'dq3dt_nophys not found in ', filename
         
         time_phys_hours.append(nc_file['time'][0])
                 
         nc_file.close()
+    dt3dt_nophys = np.asarray(dt3dt_nophys)
     dq3dt_nophys = np.asarray(dq3dt_nophys)
     time_phys_hours = np.asarray(time_phys_hours)
     
@@ -702,6 +1335,8 @@ def get_UFS_forcing_data(nlevs, dir, tile, i, j):
         pres_1_rev[0,:] = p_interfaces[t,::-1]
         pres_2_rev[0,:] = p_interfaces[t+1,::-1]
         
+        #print pres_2_rev[0,:], pres_1_rev[0,:]
+        
         tv_rev_new = fv3_remap.map_scalar(tv_rev.shape[1], log_pres_1_rev, tv_rev, dummy, tv_rev.shape[1], log_pres_2_rev, 0, 0, 1, np.abs(kord_tm), t_min)
         
         dp2 = np.zeros([1,qv_rev.shape[1]])
@@ -713,11 +1348,26 @@ def get_UFS_forcing_data(nlevs, dir, tile, i, j):
         tv_layers_remap[t+1,:] = tv_rev_new[0,::-1]
         qv_layers_remap[t+1,:] = qv_rev_new[0,::-1]
     
+    t_layers_remap = tv_layers_remap/(1.0 + zvir*qv_layers_remap)
+    
+    dtdt_remap = np.zeros([t_layers.shape[0]-1,t_layers.shape[1]])
+    dtdt_adv = np.zeros([t_layers.shape[0]-1,t_layers.shape[1]])
     dqvdt_remap = np.zeros([qv_layers.shape[0]-1,qv_layers.shape[1]])
     dqvdt_adv = np.zeros([qv_layers.shape[0]-1,qv_layers.shape[1]])
     for t in range(t_layers.shape[0]-1):
         dqvdt_remap[t,:] = (qv_layers_remap[t+1,:] - qv_layers[t,:])/(3600.0*(time_dyn_hours[t+1] - time_dyn_hours[t]))
         dqvdt_adv[t,:] = dq3dt_nophys[t+1,:] - dqvdt_remap[t,:]  #valid at p_layers[t]
+        dtdt_remap[t,:] = (t_layers_remap[t+1,:] - t_layers[t,:])/(3600.0*(time_dyn_hours[t+1] - time_dyn_hours[t]))
+        dtdt_adv[t,:] = dt3dt_nophys[t+1,:] - dtdt_remap[t,:]  #valid at p_layers[t]
+    
+    for t in range(t_layers.shape[0]-1):
+        print "time = ", t
+        pres_1_rev = p_interfaces[t,::-1]
+        pres_2_rev = p_interfaces[t+1,::-1]
+        for k in range(t_layers.shape[1]):
+            print "k = ",k,"dqvdt_adv=",dqvdt_adv[t,k],dqvdt_adv[t,k]/dq3dt_nophys[t+1,k],"dtdt_adv=",dtdt_adv[t,k],dtdt_adv[t,k]/dt3dt_nophys[t+1,k]
+            print pres_2_rev[k], pres_2_rev[k] - pres_1_rev[k]
+            
     
     #if we had dynf,phyf files at every timestep (and the SCM timestep is made to match the UFS), then dqvdt_adv should be
     #applied uninterpolated for each time step. If dynf and phyf files represent time averages over the previous diagnostic period,
@@ -1683,7 +2333,7 @@ def main():
     
     #find index of closest point in the tile if indices are not specified
     if not indices:
-        (tile_j, tile_i, point_lon, point_lat, dist_min) = find_loc_indices(location, in_dir, tile)
+        (tile_i, tile_j, point_lon, point_lat, dist_min) = find_loc_indices(location, in_dir, tile)
         print 'The closest point in tile {0} has indices [{1},{2}]'.format(tile,tile_i,tile_j)
         print 'This index has a central longitude/latitude of [{0},{1}]'.format(point_lon,point_lat)
         print 'This grid cell is approximately {0} km away from the desired location of {1} {2}'.format(dist_min/1.0E3,location[0],location[1])
@@ -1696,7 +2346,9 @@ def main():
         print 'This index has a central longitude/latitude of [{0},{1}]'.format(point_lon,point_lat)
     
     #get UFS IC data (TODO: flag to read in RESTART data rather than IC data and implement different file reads)
-    (state_data, surface_data, oro_data) = get_UFS_IC_data(in_dir, tile, tile_i, tile_j, old_chgres)
+    (state_data, surface_data, oro_data) = get_UFS_IC_data(in_dir, forcing_dir, tile, tile_i, tile_j, old_chgres)
+    
+    exit()
     
     #cold start NoahMP variables
     if (noahmp):
@@ -1711,7 +2363,7 @@ def main():
     surface_data["lat"] = point_lat
         
     #get UFS forcing data (zeros for now; only placeholder)
-    forcing_data = get_UFS_forcing_data(state_data["nlevs"], forcing_dir, tile, tile_i, tile_j)
+    forcing_data = get_UFS_forcing_data(state_data["nlevs"], state_data, forcing_dir, tile, tile_i, tile_j)
     
     #write SCM case file
     write_SCM_case_file(state_data, surface_data, oro_data, forcing_data, case_name, date)
