@@ -1,13 +1,13 @@
-!> \file gmtb_scm_type_defs.f90
+!> \file scm_type_defs.f90
 !!  Contains type definitions for SCM-related variables and physics-related variables
 
-module gmtb_scm_type_defs
+module scm_type_defs
 
-!> \section arg_table_gmtb_scm_type_defs
-!! \htmlinclude gmtb_scm_type_defs.html
+!> \section arg_table_scm_type_defs
+!! \htmlinclude scm_type_defs.html
 !!
 
-  use gmtb_scm_kinds, only: sp, dp, qp
+  use scm_kinds, only: sp, dp, qp
   use GFS_typedefs,   only: GFS_control_type,      &
                             GFS_statein_type,      &
                             GFS_stateout_type,     &
@@ -964,4 +964,4 @@ module gmtb_scm_type_defs
     return
   end function get_tracer_index
 
-end module gmtb_scm_type_defs
+end module scm_type_defs

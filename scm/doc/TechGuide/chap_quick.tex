@@ -236,7 +236,7 @@ make
 \end{lstlisting}
 \end{enumerate}
 
-The resulting executable may be found at \execout{./gmtb-scm} (Full path of \execout{gmtb-scm/scm/bin/gmtb-scm}).
+The resulting executable may be found at \execout{./scm} (Full path of \execout{gmtb-scm/scm/bin/scm}).
 
 Although \execout{make clean} is not currently implemented, an out-of-source build is used, so all that is required to clean the build/run directory is (from the \execout{bin} directory)
 \begin{lstlisting}[language=bash]
@@ -248,13 +248,13 @@ Note: This command can be dangerous (deletes files without confirming), so make 
 If you encounter errors, please capture a log file from all of the steps, and start a thread on the support forum at: \url{https://dtcenter.org/forum/ccpp-user-support/ccpp-single-column-model}
 
 \section{Run the SCM with a supplied case}
-There are several test cases provided with this version of the SCM. For all cases, the SCM will go through the time steps, applying forcing and calling the physics defined in the chosen suite definition file using physics configuration options from an associated namelist. The model is executed through one of two Python run scripts that are pre-staged into the \execout{bin} directory: \execout{run\_gmtb\_scm.py} or \execout{multi\_run\_gmtb\_scm.py}. The first sets up and runs one integration while the latter will set up and run several integrations serially.
+There are several test cases provided with this version of the SCM. For all cases, the SCM will go through the time steps, applying forcing and calling the physics defined in the chosen suite definition file using physics configuration options from an associated namelist. The model is executed through one of two Python run scripts that are pre-staged into the \execout{bin} directory: \execout{run\_scm.py} or \execout{multi\_run\_scm.py}. The first sets up and runs one integration while the latter will set up and run several integrations serially.
 
 \subsection{Single Run Script Usage} \label{subsection: singlerunscript}
 Running a case requires three pieces of information: the case to run (consisting of initial conditions, geolocation, forcing data, etc.), the physics suite to use (through a CCPP suite definition file), and a physics namelist (that specifies configurable physics options to use). As discussed in chapter \ref{chapter: cases}, cases are set up via their own namelists in \execout{../etc/case\_config}. A default physics suite is provided as a user-editable variable in the script and default namelists are associated with each physics suite (through \execout{../src/default\_namelists.py}), so, technically, one must only specify a case to run with the SCM. The single run script's interface is described below.
 
 \begin{lstlisting}[language=bash]
-./run_gmtb_scm.py -c CASE_NAME [-s SUITE_NAME] [-n PHYSICS_NAMELIST_WITH_PATH] [-g] [-d]
+./run_scm.py -c CASE_NAME [-s SUITE_NAME] [-n PHYSICS_NAMELIST_WITH_PATH] [-g] [-d]
 \end{lstlisting}
 
 When invoking the run script, the only required argument is the name of the case to run. The case name used must match one of the case configuration files located in \execout{../etc/case\_config} (\emph{without the .nml extension!}). If specifying a suite other than the default, the suite name used must match the value of the suite name in one of the suite definition files located in \execout{../../ccpp/suites} (Note: not the filename of the suite definition file). As part of the fourth CCPP release, the following suite names are valid:
@@ -282,18 +282,18 @@ examine the output file (ncdump, ncview, NCL, etc).
 A second Python script is provided for automating the execution of multiple integrations through repeated calling of the single run script. From the run directory, one may use this script through the following interface.
 
 \begin{lstlisting}[language=bash]
-./multi_run_gmtb_scm.py {[-c CASE_NAME] [-s SUITE_NAME] [-f PATH_TO_FILE]} [-v{v}] [-t] [-d]
+./multi_run_scm.py {[-c CASE_NAME] [-s SUITE_NAME] [-f PATH_TO_FILE]} [-v{v}] [-t] [-d]
 \end{lstlisting}
 
 No arguments are required for this script. The \execout{-c or --case}, \execout{-s or --suite}, or \execout{-f or --file} options form a mutually-exclusive group, so exactly one of these is allowed at one time. If \execout{--c} is specified with a case name, the script will run a set of integrations for all supported suites (defined in \execout{../src/supported\_suites.py}) for that case. If \execout{-s} is specified with a suite name, the script will run a set of integrations for all supported cases (defined in \execout{../src/supported\_cases.py}) for that that suite. If \execout{-f} is specified with the path to a filename, it will read in lists of cases, suites, and namelists to use from that file. An example for this file's syntax can be found in \execout{../src/example\_multi\_run.py}. If multiple namelists are specified in the file, there either must be one suite specified \emph{or} the number of suites must match the number of namelists. If none of the \execout{-c or --case}, \execout{-s or --suite}, or \execout{-f or --file} options group is specified, the script will run through all permutations of supported cases and suites (as defined in the files previously mentioned).
 
-In addition to the main options, some helper options can also be used with any of those above. The \execout{-v{v} or --verbose} option can be used to output more information from the script to the console and to a log file. If this option is not used, only completion progress messages are written out. If one \execout{-v} is used, the script will write out completion progress messages and all messages and output from the single run script. If two \execout{-vv} are used, the script will also write out all messages and single run script output to a log file (\execout{multi\_run\_gmtb\_scm.log}) in the \execout{bin} directory. The option, \execout{-t or --timer}, can be used to output the elapsed time for each integration executed by the script. Note that the execution time includes file operations performed by the single run script in addition to the execution of the underlying (Fortran) SCM executable. By default, this option will execute one integration of each subprocess. Since some variability is expected for each model run, if greater precision is required, the number of integrations for timing averaging can be set through the internal script variable \execout{timer\_iterations}. This option can be useful, for example, for getting a rough idea of relative computational expense of different physics suites. Finally, the \execout{-d} flag is required when running this command in a Docker container in order to successfully mount a volume between the host machine and the Docker container instance and to share the output and plots with the host machine.
+In addition to the main options, some helper options can also be used with any of those above. The \execout{-v{v} or --verbose} option can be used to output more information from the script to the console and to a log file. If this option is not used, only completion progress messages are written out. If one \execout{-v} is used, the script will write out completion progress messages and all messages and output from the single run script. If two \execout{-vv} are used, the script will also write out all messages and single run script output to a log file (\execout{multi\_run\_scm.log}) in the \execout{bin} directory. The option, \execout{-t or --timer}, can be used to output the elapsed time for each integration executed by the script. Note that the execution time includes file operations performed by the single run script in addition to the execution of the underlying (Fortran) SCM executable. By default, this option will execute one integration of each subprocess. Since some variability is expected for each model run, if greater precision is required, the number of integrations for timing averaging can be set through the internal script variable \execout{timer\_iterations}. This option can be useful, for example, for getting a rough idea of relative computational expense of different physics suites. Finally, the \execout{-d} flag is required when running this command in a Docker container in order to successfully mount a volume between the host machine and the Docker container instance and to share the output and plots with the host machine.
 
 \subsection{Batch Run Script}
 
-If using the model on HPC resources and significant amounts of processor time is anticipated for the experiments, it will likely be necessary to submit a job through the HPC's batch system. An example script has been included in the repository for running the model on Hera's batch system (SLURM). It is located in \execout{gmtb-scm/scm/etc/gmtb\_scm\_slurm\_example.py}. Edit the \execout{job\_name}, \execout{account}, etc. to suit your needs and copy to the \execout{bin} directory. The case name to be run is included in the \execout{command} variable. To use, invoke
+If using the model on HPC resources and significant amounts of processor time is anticipated for the experiments, it will likely be necessary to submit a job through the HPC's batch system. An example script has been included in the repository for running the model on Hera's batch system (SLURM). It is located in \execout{gmtb-scm/scm/etc/scm\_slurm\_example.py}. Edit the \execout{job\_name}, \execout{account}, etc. to suit your needs and copy to the \execout{bin} directory. The case name to be run is included in the \execout{command} variable. To use, invoke
 \begin{lstlisting}[language=bash]
-./gmtb_scm_slurm_example.py
+./scm_slurm_example.py
 \end{lstlisting}
 from the \execout{bin} directory.
 
@@ -380,11 +380,11 @@ export OUT_DIR=/path/to/output
 For Windows, the format that worked for us followed this example: \execout{/c/Users/my username/path/to/directory/to/mount}
 \item To run the SCM, you can run the Docker container that was just created and give it the same run commands as discussed in sections \ref{subsection: singlerunscript} and \ref{subsection: multirunscript}. \textbf{Be sure to remember to include the \execout{-d} option for all run commands}. For example,
 \begin{lstlisting}[language=bash]
-docker run --rm -it -v ${OUT_DIR}:/home --name run-ccpp-scm ccpp-scm ./run_gmtb_scm.py -c twpice -d
+docker run --rm -it -v ${OUT_DIR}:/home --name run-ccpp-scm ccpp-scm ./run_scm.py -c twpice -d
 \end{lstlisting}
 will run through the TWPICE case using the default suite and namelist and put the output in the shared directory. NOTE: Windows users may need to omit the curly braces around environment variables: use \execout{\$OUT\_DIR} instead of \execout{\$\{OUT\_DIR\}}. For running through all supported cases and suites, use
 \begin{lstlisting}[language=bash]
-docker run --rm -it -v ${OUT_DIR}:/home --name run-ccpp-scm ccpp-scm ./multi_run_gmtb_scm.py -d
+docker run --rm -it -v ${OUT_DIR}:/home --name run-ccpp-scm ccpp-scm ./multi_run_scm.py -d
 \end{lstlisting}
 The options included in the above \execout{run} commands are the following:
 \begin{itemize}
@@ -400,7 +400,7 @@ docker run --rm -it -v ${OUT_DIR}:/home --name run-ccpp-scm ccpp-scm /bin/bash
 \end{lstlisting}
 You will be placed within the container space and within the \execout{bin} directory of the SCM with a pre-compiled executable. At this point, one could use the run scripts as described in previous sections (remembering to include the \execout{-d} option on run scripts if output is to be shared with the host machine). To create plots, from within the \execout{bin} directory of the SCM in container space, issue the following command, with an appropriately configured \execout{*.ini} file, .i.e.
 \begin{lstlisting}[language=bash]
-./gmtb_scm_analysis.py twpice_all_suites.ini -d
+./scm_analysis.py twpice_all_suites.ini -d
 \end{lstlisting}
 NOTE: If developing, since the container is ephemeral, one should push their changes to a remote git repository to save them (i.e. a fork on GitHub.com).
 \end{enumerate}

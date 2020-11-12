@@ -1,10 +1,10 @@
-!> \file gmtb_scm_utils.f90
+!> \file scm_utils.f90
 !!  Contains miscellaneous helper subroutines.
 
-module gmtb_scm_utils
+module scm_utils
 
-use gmtb_scm_kinds, only: sp, dp, qp
-use gmtb_scm_physical_constants, only: con_rd, con_g
+use scm_kinds, only: sp, dp, qp
+use scm_physical_constants, only: con_rd, con_g
 
 implicit none
 
@@ -12,7 +12,7 @@ contains
 
 !> \ingroup SCM
 !! @{
-!! \defgroup utils gmtb_scm_utils
+!! \defgroup utils scm_utils
 !! @{
 !! Contains miscellaneous helper subroutines.
 
@@ -94,4 +94,4 @@ subroutine w_to_omega(n_col, n_lev, w, p, T, omega)
 end subroutine w_to_omega
 !> @}
 !> @}
-end module gmtb_scm_utils
+end module scm_utils
