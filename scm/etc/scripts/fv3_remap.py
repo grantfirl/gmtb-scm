@@ -30,43 +30,44 @@ def ppm_limiters(dm, a4, itot, lmt):
     #! Standard PPM constraint
         for i in range(0,itot):
             if(dm[i] == 0.):
-                a4[2,i] = a4[1,i]
-                a4[3,i] = a4[1,i]
-                a4[4,i] = 0.
+                a4[1,i] = a4[0,i]
+                a4[2,i] = a4[0,i]
+                a4[2,i] = 0.
             else:
-                da1  = a4[3,i] - a4[2,i]
+                da1  = a4[2,i] - a4[1,i]
                 da2  = da1*da1
-                a6da = a4[4,i]*da1
+                a6da = a4[3,i]*da1
                 if(a6da < -da2):
-                    a4[4,i] = 3.*(a4[2,i]-a4[1,i])
-                    a4[3,i] = a4[2,i] - a4[4,i]
+                    a4[3,i] = 3.*(a4[1,i]-a4[0,i])
+                    a4[2,i] = a4[1,i] - a4[3,i]
                 elif(a6da > da2):
-                    a4[4,i] = 3.*(a4[3,i]-a4[1,i])
-                    a4[2,i] = a4[3,i] - a4[4,i]
+                    a4[3,i] = 3.*(a4[2,i]-a4[0,i])
+                    a4[1,i] = a4[2,i] - a4[3,i]
     elif (lmt == 1):
     #! Improved full monotonicity constraint (Lin 2004)
     #! Note: no need to provide first guess of A6 <-- a4(4,i)
         for i in range(0,itot):
             qmp = 2.*dm[i]
-            a4[2,i] = a4[1,i]-np.sign(qmp)[0]*np.min([np.abs(qmp),np.abs(a4[2,i]-a4[1,i])])
-            a4[3,i] = a4[1,i]+np.sign(qmp)[0]*np.min([np.abs(qmp),np.abs(a4[3,i]-a4[1,i])])
-            a4[4,i] = 3.*( 2.*a4[1,i] - (a4[2,i]+a4[3,i]) )
+            #GJF: this code is probably not identical to the Fortran version
+            a4[1,i] = a4[0,i]-np.sign(qmp)[0]*np.min([np.abs(qmp),np.abs(a4[1,i]-a4[0,i])])
+            a4[2,i] = a4[0,i]+np.sign(qmp)[0]*np.min([np.abs(qmp),np.abs(a4[2,i]-a4[0,i])])
+            a4[3,i] = 3.*( 2.*a4[0,i] - (a4[1,i]+a4[2,i]) )
     elif (lmt == 2):
     #! Positive definite constraint
          for i in range(0,itot):
-             if( np.abs(a4[3,i]-a4[2,i]) < -a4[4,i] ):
-                 fmin = a4[1,i]+0.25*(a4[3,i]-a4[2,i])**2/a4[4,i]+a4[4,i]*r12
+             if( np.abs(a4[2,i]-a4[1,i]) < -a4[3,i] ):
+                 fmin = a4[0,i]+0.25*(a4[2,i]-a4[1,i])**2/a4[3,i]+a4[3,i]*r12
                  if( fmin < 0.):
-                    if(a4[1,i] < a4[3,i] and a4[1,i] < a4[2,i]):
-                        a4[3,i] = a4[1,i]
-                        a4[2,i] = a4[1,i]
-                        a4[4,i] = 0.
-                    elif(a4[3,i] > a4[2,i]):
-                        a4[4,i] = 3.*(a4[2,i]-a4[1,i])
-                        a4[3,i] = a4[2,i] - a4[4,i]
+                    if(a4[0,i] < a4[2,i] and a4[0,i] < a4[1,i]):
+                        a4[2,i] = a4[0,i]
+                        a4[1,i] = a4[0,i]
+                        a4[3,i] = 0.
+                    elif(a4[2,i] > a4[1,i]):
+                        a4[3,i] = 3.*(a4[1,i]-a4[0,i])
+                        a4[2,i] = a4[1,i] - a4[3,i]
                     else:
-                        a4[4,i] = 3.*(a4[3,i]-a4[1,i])
-                        a4[2,i] = a4[3,i] - a4[4,i]
+                        a4[3,i] = 3.*(a4[2,i]-a4[0,i])
+                        a4[1,i] = a4[2,i] - a4[3,i]
     return a4
 
 def cs_limiters(im, extm, a4, iv):
@@ -174,84 +175,84 @@ def ppm_profile(a4, delp, km, i1, i2, iv, kord):
 
      km1 = km - 1
      
-     for k in range(2,km):
-         for i in range(i1,i2):
-             delq[i,k-1] =   a4[1,i,k] - a4[1,i,k-1]
+     for k in range(1,km):
+         for i in range(i1-1,i2):
+             delq[i,k-1] =   a4[0,i,k] - a4[0,i,k-1]
              d4[i,k  ]   = delp[i,k-1] + delp[i,k]
-     for k in range(2,km1):
-         for i in range(i1,i2):
+     for k in range(1,km1):
+         for i in range(i1-1,i2):
              c1  = (delp[i,k-1]+0.5*delp[i,k])/d4[i,k+1]
              c2  = (delp[i,k+1]+0.5*delp[i,k])/d4[i,k]
-         df2[i,k] = delp[i,k]*(c1*delq[i,k] + c2*delq[i,k-1]) / (d4[i,k]+delp[i,k+1])
-         dc[i,k] = np.sign(df2[i,k])*np.abs(np.min([np.abs(df2[i,k]), np.max([a4[1,i,k-1],a4[1,i,k],a4[1,i,k+1]])-a4[1,i,k], a4[1,i,k]-np.min([a4[1,i,k-1],a4[1,i,k],a4[1,i,k+1]])]))
-
+             df2[i,k] = delp[i,k]*(c1*delq[i,k] + c2*delq[i,k-1]) / (d4[i,k]+delp[i,k+1])
+             dc[i,k] = np.sign(df2[i,k])*np.abs(np.min([np.abs(df2[i,k]), np.max([a4[0,i,k-1],a4[0,i,k],a4[0,i,k+1]])-a4[0,i,k], a4[0,i,k]-np.min([a4[0,i,k-1],a4[0,i,k],a4[0,i,k+1]])]))
+     
     #!-----------------------------------------------------------
     #! 4th order interpolation of the provisional cell edge value
     #!-----------------------------------------------------------
 
-     for k in range(3,km1):
-         for i in range(i1,i2):
+     for k in range(2,km1):
+         for i in range(i1-1,i2):
              c1 = delq[i,k-1]*delp[i,k-1] / d4[i,k]
              a1 = d4[i,k-1] / (d4[i,k] + delp[i,k-1])
              a2 = d4[i,k+1] / (d4[i,k] + delp[i,k])
-             a4[2,i,k] = a4[1,i,k-1] + c1 + 2./(d4[i,k-1]+d4[i,k+1]) * (delp[i,k]*(c1*(a1 - a2)+a2*dc[i,k-1]) - delp[i,k-1]*a1*dc[i,k])
-
+             a4[1,i,k] = a4[0,i,k-1] + c1 + 2./(d4[i,k-1]+d4[i,k+1]) * (delp[i,k]*(c1*(a1 - a2)+a2*dc[i,k-1]) - delp[i,k-1]*a1*dc[i,k])
+     
     #! Area preserving cubic with 2nd deriv. = 0 at the boundaries
     #! Top
-     for i in range(i1,i2):
+     for i in range(i1-1,i2):
          d1 = delp[i,1]
          d2 = delp[i,2]
-         qm = (d2*a4[1,i,1]+d1*a4[1,i,2]) / (d1+d2)
-         dq = 2.*(a4[1,i,2]-a4[1,i,1]) / (d1+d2)
-         c1 = 4.*(a4[2,i,3]-qm-d2*dq) / ( d2*(2.*d2*d2+d1*(d2+3.*d1)) )
+         qm = (d2*a4[0,i,0]+d1*a4[0,i,1]) / (d1+d2)
+         dq = 2.*(a4[0,i,1]-a4[0,i,0]) / (d1+d2)
+         c1 = 4.*(a4[1,i,2]-qm-d2*dq) / ( d2*(2.*d2*d2+d1*(d2+3.*d1)) )
          c3 = dq - 0.5*c1*(d2*(5.*d1+d2)-3.*d1*d1)
-         a4[2,i,2] = qm - 0.25*c1*d1*d2*(d2+3.*d1)
+         a4[1,i,1] = qm - 0.25*c1*d1*d2*(d2+3.*d1)
          #! Top edge:
          #!-------------------------------------------------------
-         a4[2,i,1] = d1*(2.*c1*d1**2-c3) + a4[2,i,2]
+         a4[1,i,0] = d1*(2.*c1*d1**2-c3) + a4[1,i,1]
          #!-------------------------------------------------------
          #!        a4[2,i,1] = (12./7.)*a4[1,i,1]-(13./14.)*a4[1,i,2]+(3./14.)*a4[1,i,3]
          #!-------------------------------------------------------
          #! No over- and undershoot condition
-         a4[2,i,2] = np.max([a4[2,i,2], np.min([a4[1,i,1], a4[1,i,2]])])
-         a4[2,i,2] = np.min([a4[2,i,2], np.max([a4[1,i,1], a4[1,i,2]])])
-         dc[i,1] =  0.5*(a4[2,i,2] - a4[1,i,1])
+         a4[1,i,1] = np.max([a4[1,i,1], np.min([a4[0,i,0], a4[0,i,1]])])
+         a4[0,i,1] = np.min([a4[1,i,1], np.max([a4[0,i,0], a4[0,i,1]])])
+         dc[i,0] =  0.5*(a4[1,i,1] - a4[0,i,0])
 
          #! Enforce monotonicity  within the top layer
-
+     
      if (iv == 0):
-        for i in range(i1,i2):
-           a4[2,i,1] = np.max([0., a4[2,i,1]])
-           a4[2,i,2] = np.max([0., a4[2,i,2]])
+        for i in range(i1-1,i2):
+           a4[1,i,0] = np.max([0., a4[1,i,0]])
+           a4[1,i,1] = np.max([0., a4[1,i,1]])
      elif (iv == -1):
-         for i in range(i1,i2):
-             if (a4[2,i,1]*a4[1,i,1] <= 0. ):
-                  a4[2,i,1] = 0.
+         for i in range(i1-1,i2):
+             if (a4[1,i,0]*a4[0,i,0] <= 0. ):
+                  a4[1,i,0] = 0.
      elif (np.abs(iv) == 2):
-         for i in range(i1,i2):
-             a4[2,i,1] = a4[1,i,1]
-             a4[3,i,1] = a4[1,i,1]
+         for i in range(i1-1,i2):
+             a4[1,i,0] = a4[0,i,0]
+             a4[2,i,0] = a4[0,i,0]
 
      #! Bottom
      #! Area preserving cubic with 2nd deriv. = 0 at the surface
-     for i in range(i1,i2):
-         d1 = delp[i,km]
-         d2 = delp[i,km1]
-         qm = (d2*a4[1,i,km]+d1*a4[1,i,km1]) / (d1+d2)
-         dq = 2.*(a4[1,i,km1]-a4[1,i,km]) / (d1+d2)
-         c1 = (a4[2,i,km1]-qm-d2*dq) / (d2*(2.*d2*d2+d1*(d2+3.*d1)))
+     for i in range(i1-1,i2):
+         d1 = delp[i,km-1]
+         d2 = delp[i,km1-1]
+         qm = (d2*a4[0,i,km-1]+d1*a4[0,i,km1-1]) / (d1+d2)
+         dq = 2.*(a4[0,i,km1-1]-a4[0,i,km-1]) / (d1+d2)
+         c1 = (a4[1,i,km1-1]-qm-d2*dq) / (d2*(2.*d2*d2+d1*(d2+3.*d1)))
          c3 = dq - 2.0*c1*(d2*(5.*d1+d2)-3.*d1*d1)
-         a4[2,i,km] = qm - c1*d1*d2*(d2+3.*d1)
+         a4[1,i,km-1] = qm - c1*d1*d2*(d2+3.*d1)
          #! Bottom edge:
          #!-----------------------------------------------------
-         a4[3,i,km] = d1*(8.*c1*d1**2-c3) + a4[2,i,km]
+         a4[2,i,km-1] = d1*(8.*c1*d1**2-c3) + a4[1,i,km-1]
          #!        dc[i,km] = 0.5*(a4[3,i,km] - a4[1,i,km])
          #!-----------------------------------------------------
          #!        a4[3,i,km] = (12./7.)*a4[1,i,km]-(13./14.)*a4[1,i,km-1]+(3./14.)*a4[1,i,km-2]
          #! No over- and under-shoot condition
-         a4[2,i,km] = np.max([a4[2,i,km], np.min([a4[1,i,km], a4[1,i,km1]])])
-         a4[2,i,km] = np.min([a4[2,i,km], np.max([a4[1,i,km], a4[1,i,km1]])])
-         dc[i,km] = 0.5*(a4[1,i,km] - a4[2,i,km])
+         a4[1,i,km-1] = np.max([a4[1,i,km-1], np.min([a4[0,i,km-1], a4[0,i,km1-1]])])
+         a4[1,i,km-1] = np.min([a4[1,i,km-1], np.max([a4[0,i,km-1], a4[0,i,km1-1]])])
+         dc[i,km-1] = 0.5*(a4[0,i,km-1] - a4[1,i,km-1])
 
 
      #! Enforce constraint on the "slope" at the surface
@@ -273,34 +274,34 @@ def ppm_profile(a4, delp, km, i1, i2, iv, kord):
      #     enddo
      ##else
      if (iv == 0):
-         for i in range(i1,i2):
-            a4[2,i,km] = np.max([0.,a4[2,i,km]])
-            a4[3,i,km] = np.max([0.,a4[3,i,km]])
+         for i in range(i1-1,i2):
+            a4[1,i,km-1] = np.max([0.,a4[1,i,km-1]])
+            a4[2,i,km-1] = np.max([0.,a4[2,i,km-1]])
      elif (iv < 0):
-         for i in range(i1,i2):
-             if (a4[1,i,km]*a4[3,i,km] <= 0.):
-                 a4[3,i,km] = 0.
+         for i in range(i1-1,i2):
+             if (a4[0,i,km-1]*a4[2,i,km-1] <= 0.):
+                 a4[2,i,km-1] = 0.
      ##endif
 
-     for k in range(1,km1):
-         for i in range(i1,i2):
-            a4[3,i,k] = a4[2,i,k+1]
+     for k in range(0,km1):
+         for i in range(i1-1,i2):
+            a4[2,i,k] = a4[1,i,k+1]
 
      #!-----------------------------------------------------------
      #! f(s) = AL + s*[(AR-AL) + A6*(1-s)]         ( 0 <= s  <= 1 )
      #!-----------------------------------------------------------
      #! Top 2 and bottom 2 layers always use monotonic mapping
-     for k in range(1,2):
-         for i in range(i1,i2):
-             a4[4,i,k] = 3.*(2.*a4[1,i,k] - (a4[2,i,k]+a4[3,i,k]))
+     for k in range(0,2):
+         for i in range(i1-1,i2):
+             a4[3,i,k] = 3.*(2.*a4[0,i,k] - (a4[1,i,k]+a4[2,i,k]))
          a4[:,:,k] = ppm_limiters(dc[:,k], a4[:,:,k], it, 0)
-
+     
      if (kord >= 7):
          #!-----------------------
          #! Huynh's 2nd constraint
          #!-----------------------
-         for k in range(2,km1):
-             for i in range(i1,i2):
+         for k in range(1,km1):
+             for i in range(i1-1,i2):
                  #! Method#1
                  #!           h2[i,k] = delq[i,k] - delq[i,k-1]
                  #! Method#2 - better
@@ -309,26 +310,26 @@ def ppm_profile(a4, delp, km, i1, i2, iv, kord):
                  #!!!         h2[i,k] = dc[i,k+1] - dc[i,k-1]
          fac = 1.5           #! original quasi-monotone
          
-         for k in range(3,km-2):
-             for i in range(i1,i2):
+         for k in range(2,km-2):
+             for i in range(i1-1,i2):
                  #! Right edges
                  #!        qmp   = a4[1,i,k] + 2.0*delq[i,k-1]
                  #!        lac   = a4[1,i,k] + fac*h2[i,k-1] + 0.5*delq[i,k-1]
                  pmp   = 2.*dc[i,k]
-                 qmp   = a4[1,i,k] + pmp
-                 lac   = a4[1,i,k] + fac*h2[i,k-1] + dc[i,k]
-                 a4[3,i,k] = np.min([np.max([a4[3,i,k], np.min([a4[1,i,k], qmp, lac])]), np.max([a4[1,i,k], qmp, lac])])
+                 qmp   = a4[0,i,k] + pmp
+                 lac   = a4[0,i,k] + fac*h2[i,k-1] + dc[i,k]
+                 a4[2,i,k] = np.min([np.max([a4[2,i,k], np.min([a4[0,i,k], qmp, lac])]), np.max([a4[0,i,k], qmp, lac])])
                  #! Left  edges
                  #!        qmp   = a4[1,i,k] - 2.0*delq[i,k]
                  #!        lac   = a4[1,i,k] + fac*h2[i,k+1] - 0.5*delq[i,k]
                  #!
-                 qmp   = a4[1,i,k] - pmp
-                 lac   = a4[1,i,k] + fac*h2[i,k+1] - dc[i,k]
-                 a4[2,i,k] = np.min([np.max([a4[2,i,k], np.min([a4[1,i,k], qmp, lac])]), np.max([a4[1,i,k], qmp, lac])])
+                 qmp   = a4[0,i,k] - pmp
+                 lac   = a4[0,i,k] + fac*h2[i,k+1] - dc[i,k]
+                 a4[1,i,k] = np.min([np.max([a4[1,i,k], np.min([a4[0,i,k], qmp, lac])]), np.max([a4[0,i,k], qmp, lac])])
                  #!-------------
                  #! Recompute A6
                  #!-------------
-                 a4[4,i,k] = 3.*(2.*a4[1,i,k] - (a4[2,i,k]+a4[3,i,k]))
+                 a4[3,i,k] = 3.*(2.*a4[0,i,k] - (a4[1,i,k]+a4[2,i,k]))
              #! Additional constraint to ensure positivity when kord=7
              if (iv == 0 and kord >= 6):
                  a4[:,:,k] = ppm_limiters(dc[:,k], a4[:,:,k], it, 2)
@@ -338,18 +339,20 @@ def ppm_profile(a4, delp, km, i1, i2, iv, kord):
         if (iv == 0):
             lmt = np.min([2, lmt])
 
-        for k in range(3,km-2):
+        for k in range(2,km-2):
             if( kord != 4):
-                for i in range(i1,i2):
-                    a4[4,i,k] = 3.*(2.*a4[1,i,k] - (a4[2,i,k]+a4[3,i,k]))
+                for i in range(i1-1,i2):
+                    a4[3,i,k] = 3.*(2.*a4[0,i,k] - (a4[1,i,k]+a4[2,i,k]))
              
             if(kord != 6):
                  a4[:,:,k] = ppm_limiters(dc[:,k], a4[:,:,k], it, lmt)
 
-     for k in range(km1,km):
-         for i in range(i1,i2):
-             a4[4,i,k] = 3.*(2.*a4[1,i,k] - (a4[2,i,k]+a4[3,i,k]))
+     for k in range(km1-1,km):
+         for i in range(i1-1,i2):
+             a4[3,i,k] = 3.*(2.*a4[0,i,k] - (a4[1,i,k]+a4[2,i,k]))
          a4[:,:,k] = ppm_limiters(dc[:,k], a4[:,:,k], it, 0)
+    
+     return a4
 
 def scalar_profile(qs, a4, delp, km, i1, i2, iv, kord, qmin):
     #! Optimized vertical profile reconstruction:
@@ -726,7 +729,7 @@ def map_scalar(km, pe1, q1, qs, kn, pe2, i1, i2, iv, kord, q_min):
        q4 = scalar_profile(qs, q4, dp1, km, i1, i2, iv, kord, q_min)
     else:
        q4 = ppm_profile(q4, dp1, km, i1, i2, iv, kord)
-    
+       
     for i in range(0,im):
         k0 = 0
         for k in range(0,kn):
@@ -759,12 +762,18 @@ def map_scalar(km, pe1, q1, qs, kn, pe2, i1, i2, iv, kord, q_min):
                                 #goto 123 #(exit out of l-loop)
                                 break
                         else:
+                            #GJF: the following if statement is not in the fv_mapz, but it captures the case where pe2[kn] > pe1[km] where the m loop is not entered; without this, the lowest layer values are weird
+                            if (l+1 == km):
+                                dp = pe2[i,kn]-pe1[i,km]
+                                esl = dp / dp1[i,km-1]
+                                qsum = qsum + dp*(q4[1,i,km-1]+0.5*esl*(q4[2,i,km-1]-q4[1,i,km-1]+q4[3,i,km-1]*(1.-r23*esl)))
                             break #handles goto 123 statement below (exits out of l-loop even if m-loop successfully completes)
                             #continue
                         break
                         #goto 123 #(right before going to next iteration of "for k in range(1,kn):" loop)
             if not next_k:
                 q2[i,k] = qsum / (pe2[i,k+1] - pe2[i,k]) #AKA label 123
+                
     return q2
 
 def map1_q2 (km, pe1, q1, kn, pe2, dp2, i1, i2, iv, kord, q_min):
@@ -1321,6 +1330,175 @@ def fillq(im, km, nq, q, dp):
                   q[i,k ,ic] = 0.
 
   return q
+
+def fillz(im, km, nq, q, dp):
+ #integer,  intent(in):: im                !< No. of longitudes
+ #integer,  intent(in):: km                !< No. of levels
+ #integer,  intent(in):: nq                !< Total number of tracers
+ #real , intent(in)::  dp(im,km)           !< pressure thickness
+ #real , intent(inout) :: q(im,km,nq)      !< tracer mixing ratio
+ #! LOCAL VARIABLES:
+ #logical:: zfix(im)
+ #real ::  dm(km)
+ #integer i, k, ic, k1
+ #real  qup, qly, dup, dq, sum0, sum1, fac
+ 
+ dm = np.zeros([km])
+ 
+ #print ('orig q')
+ #print q
+ 
+ for ic in range(0,nq):
+     for i in range(0,im):
+         #top layer
+         if( q[i,0,ic] < 0. ):
+             q[i,1,ic] = q[i,1,ic] + q[i,0,ic]*dp[i,0]/dp[i,1]
+             q[i,0,ic] = 0.
+     #! Interior
+     zfix = [False] * im
+     for k in range(1,km-1):
+        for i in range(0,im):
+            if( q[i,k,ic] < 0. ):
+                #print('neg in layer',k,q[i,k,ic])
+                zfix[i] = True
+                if ( q[i,k-1,ic] > 0. ):
+                    #print('borrow from above')
+                    #! Borrow from above
+                    dq = np.min( [q[i,k-1,ic]*dp[i,k-1], -q[i,k,ic]*dp[i,k]] ) 
+                    q[i,k-1,ic] = q[i,k-1,ic] - dq/dp[i,k-1]
+                    q[i,k  ,ic] = q[i,k  ,ic] + dq/dp[i,k  ]
+                if ( q[i,k,ic] < 0.0 and q[i,k+1,ic] > 0. ):
+                    #! Borrow from below:
+                    #print('borrow from below')
+                    dq = np.min ( [q[i,k+1,ic]*dp[i,k+1], -q[i,k,ic]*dp[i,k]] ) 
+                    q[i,k+1,ic] = q[i,k+1,ic] - dq/dp[i,k+1]
+                    q[i,k  ,ic] = q[i,k  ,ic] + dq/dp[i,k  ]
+                #print ('new q',q[i,k  ,ic])
+     #! Bottom layer
+     k = km-1
+     for i in range(0,im):
+        if( q[i,k,ic] < 0. and q[i,k-1,ic] > 0.):
+            zfix[i] = True
+            #! Borrow from above
+            qup =  q[i,k-1,ic]*dp[i,k-1]
+            qly = -q[i,k  ,ic]*dp[i,k  ]
+            dup =  np.min([qly, qup])
+            q[i,k-1,ic] = q[i,k-1,ic] - dup/dp[i,k-1] 
+            q[i,k,  ic] = q[i,k,  ic] + dup/dp[i,k  ]
+
+     #! Perform final check and non-local fix if needed
+     for i in range(0,im):
+        if ( zfix[i] ):
+            sum0 = 0.
+            for k in range(1,km):
+                dm[k] = q[i,k,ic]*dp[i,k]
+                sum0 = sum0 + dm[k]
+            #print('sum0',sum0)
+            if ( sum0 > 0. ):
+                sum1 = 0.
+                for k in range(1,km):
+                   sum1 = sum1 + np.max([0., dm[k]])
+                fac = sum0 / sum1
+                #print('fac',fac)
+                for k in range(1,km):
+                   q[i,k,ic] = np.max([0., fac*dm[k]/dp[i,k]])
+ 
+ return q
+# do ic=1,nq
+# #ifdef DEV_GFS_PHYS
+# ! Bottom up:
+#     do k=km,2,-1
+#        k1 = k-1
+#        do i=1,im
+#          if( q(i,k,ic) < 0. ) then
+#              q(i,k1,ic) = q(i,k1,ic) + q(i,k,ic)*dp(i,k)/dp(i,k1)
+#              q(i,k ,ic) = 0.
+#          endif
+#        enddo
+#     enddo
+# ! Top down:
+#     do k=1,km-1
+#        k1 = k+1
+#        do i=1,im
+#           if( q(i,k,ic) < 0. ) then
+#               q(i,k1,ic) = q(i,k1,ic) + q(i,k,ic)*dp(i,k)/dp(i,k1)
+#               q(i,k ,ic) = 0.
+#           endif
+#        enddo
+#     enddo
+# #else
+
+# ! Top layer
+#     do i=1,im
+#        if( q(i,1,ic) < 0. ) then
+#            q(i,2,ic) = q(i,2,ic) + q(i,1,ic)*dp(i,1)/dp(i,2)
+#            q(i,1,ic) = 0.
+#         endif
+#     enddo
+
+# ! Interior
+#     zfix(:) = .false.
+#     do k=2,km-1
+#        do i=1,im
+#        if( q(i,k,ic) < 0. ) then
+#            zfix(i) = .true.
+#            if ( q(i,k-1,ic) > 0. ) then
+# ! Borrow from above
+#               dq = min ( q(i,k-1,ic)*dp(i,k-1), -q(i,k,ic)*dp(i,k) ) 
+#               q(i,k-1,ic) = q(i,k-1,ic) - dq/dp(i,k-1)
+#               q(i,k  ,ic) = q(i,k  ,ic) + dq/dp(i,k  )
+#            endif
+#            if ( q(i,k,ic)<0.0 .and. q(i,k+1,ic)>0. ) then
+# ! Borrow from below:
+#               dq = min ( q(i,k+1,ic)*dp(i,k+1), -q(i,k,ic)*dp(i,k) ) 
+#               q(i,k+1,ic) = q(i,k+1,ic) - dq/dp(i,k+1)
+#               q(i,k  ,ic) = q(i,k  ,ic) + dq/dp(i,k  )
+#            endif
+#         endif
+#        enddo
+#     enddo
+# 
+# ! Bottom layer
+#     k = km
+#     do i=1,im
+#        if( q(i,k,ic)<0. .and. q(i,k-1,ic)>0.) then
+#            zfix(i) = .true.
+# ! Borrow from above
+#            qup =  q(i,k-1,ic)*dp(i,k-1)
+#            qly = -q(i,k  ,ic)*dp(i,k  )
+#            dup =  min(qly, qup)
+#            q(i,k-1,ic) = q(i,k-1,ic) - dup/dp(i,k-1) 
+#            q(i,k,  ic) = q(i,k,  ic) + dup/dp(i,k  )
+#         endif
+#     enddo
+
+# ! Perform final check and non-local fix if needed
+#     do i=1,im
+#        if ( zfix(i) ) then
+# 
+#          sum0 = 0.
+#          do k=2,km
+#             dm(k) = q(i,k,ic)*dp(i,k)
+#             sum0 = sum0 + dm(k)
+#          enddo
+# 
+#          if ( sum0 > 0. ) then
+#            sum1 = 0.
+#            do k=2,km
+#               sum1 = sum1 + max(0., dm(k))
+#            enddo
+#            fac = sum0 / sum1
+#            do k=2,km
+#               q(i,k,ic) = max(0., fac*dm(k)/dp(i,k))
+#            enddo
+#          endif
+# 
+#        endif
+#     enddo
+# #endif
+# 
+#  enddo
+# end subroutine fillz
 
 def mp_auto_conversion(ql, qi):
   qi0_max = 2.0E-3

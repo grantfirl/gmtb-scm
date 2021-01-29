@@ -27,6 +27,8 @@ zvir         = rvgas/rdgas - 1.
 rocp         = rdgas/cp
 grav         = 9.80665
 deg_to_rad   = math.pi/180.0
+kappa        = rdgas/cp
+p0           = 100000.0
 
 missing_value = 9.99e20
 
@@ -311,8 +313,8 @@ def get_UFS_IC_data(dir, forcing_dir, tile, i, j, old_chgres):
     #     state_data["T"] = temp
     #     state_data["pres"] = np.exp(pn1[0:nlevs])
     
-    print "qv = ",state_data["qv"]
-    print len(state_data["qv"])
+    #print "qv = ",state_data["qv"]
+    #print len(state_data["qv"])
     
     return (state_data, surface_data, oro_data)
     
@@ -339,9 +341,10 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
         stride = 32
         lon_super_reduced = lon_super[0::stride,0::stride]
         lat_super_reduced = lat_super[0::stride,0::stride]
-        print f_name
-        print DataFrame(lon_super_reduced)
-        print DataFrame(lat_super_reduced)
+        #print f_name
+        #print DataFrame(lon_super_reduced)
+        #print DataFrame(lat_super_reduced)
+        
         #for i in range(0, lon_super_reduced.shape[0]):
         #    print i, lon_super_reduced[i,:]
         #print lon_super_reduced
@@ -420,7 +423,12 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
     sphum_model_rev = sphum_model_rev_3d[:,:,0]
     
     o3_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], o3_rev[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, 0, 8, ptop_data)
+    o3_model_rev_3d = fv3_remap.fillz(1, nlevs_model, 1, np.expand_dims(o3_model_rev, axis=2), pressure_thickness_model_rev[np.newaxis, :])
+    o3_model_rev = o3_model_rev_3d[:,:,0]
+    
     liqwat_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], liqwat_rev[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, 0, 8, ptop_data)
+    liqwat_model_rev_3d = fv3_remap.fillz(1, nlevs_model, 1, np.expand_dims(liqwat_model_rev, axis=2), pressure_thickness_model_rev[np.newaxis, :])
+    liqwat_model_rev = liqwat_model_rev_3d[:,:,0]
     
     if old_chgres:
         gz_fv = np.zeros(nlevs_model+1)
@@ -442,31 +450,31 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
         temp_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], temp_rev[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, 2, 4, ptop_data)
         
     
-    icewat_rev = np.zeros(nlevs_model)
+    icewat_model_rev = np.zeros(nlevs_model)
     all_liquid_threshold = 273.16
     all_ice_threshold = 233.16
     intermediate_threshold = 258.16
     cloud_ice_mixing_ratio_threshold = 1.0E-5
     for k in range(0, nlevs_model):
-        cloud_water = liqwat_rev[k]
+        cloud_water = liqwat_model_rev[0][k]
         if (temp_model_rev[k] > all_liquid_threshold):
-            liqwat_rev[k] = cloud_water
-            icewat_rev[k] = 0.0
+            liqwat_model_rev[0][k] = cloud_water
+            icewat_model_rev[k] = 0.0
         elif (temp_model_rev[k] < all_ice_threshold):
-            liqwat_rev[k] = 0.0
-            icewat_rev[k] = cloud_water
+            liqwat_model_rev[0][k] = 0.0
+            icewat_model_rev[k] = cloud_water
         else:
             if k == 0:
-                liqwat_rev[k] = cloud_water*(temp_model_rev[k]-all_ice_threshold)/(all_liquid_threshold - all_ice_threshold)
-                icewat_rev[k] = cloud_water - liqwat_rev[k]
+                liqwat_model_rev[0][k] = cloud_water*(temp_model_rev[k]-all_ice_threshold)/(all_liquid_threshold - all_ice_threshold)
+                icewat_model_rev[k] = cloud_water - liqwat_model_rev[0][k]
             else:
-                if (temp_model_rev[k] < intermediate_threshold and icewat_rev[k-1] > cloud_ice_mixing_ratio_threshold):
-                    liqwat_rev[k] = 0.0
-                    icewat_rev[k] = cloud_water
+                if (temp_model_rev[k] < intermediate_threshold and icewat_model_rev[k-1] > cloud_ice_mixing_ratio_threshold):
+                    liqwat_model_rev[0][k] = 0.0
+                    icewat_model_rev[k] = cloud_water
                 else:
-                    liqwat_rev[k] = cloud_water*(temp_model_rev[k]-all_ice_threshold)/(all_liquid_threshold - all_ice_threshold)
-                    icewat_rev[k] = cloud_water - liqwat_rev[k]
-        (liqwat_rev[k], dummy_rain, icewat_rev[k], dummy_snow) = fv3_remap.mp_auto_conversion(liqwat_rev[k], icewat_rev[k])
+                    liqwat_model_rev[0][k] = cloud_water*(temp_model_rev[k]-all_ice_threshold)/(all_liquid_threshold - all_ice_threshold)
+                    icewat_model_rev[k] = cloud_water - liqwat_model_rev[0][k]
+        (liqwat_model_rev[0][k], dummy_rain, icewat_model_rev[k], dummy_snow) = fv3_remap.mp_auto_conversion(liqwat_model_rev[0][k], icewat_model_rev[k])
     
     filename_pattern = '*grid.tile{0}.nc'.format(tile)
     
@@ -483,8 +491,8 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
     u_w = nc_file_data['u_w'][:,:,:].swapaxes(1,2)
     v_w = nc_file_data['v_w'][:,:,:].swapaxes(1,2)
     
-    print u_s.shape, v_s.shape
-    print u_w.shape, v_w.shape
+    #print u_s.shape, v_s.shape
+    #print u_w.shape, v_w.shape
     
     
     nc_file_grid = Dataset('{0}/{1}'.format(dir,filename))
@@ -525,8 +533,8 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
     east_test_point = np.argmax(test_lon_diff)
     north_test_point = np.argmax(test_lat_diff)
     
-    print 'east test point=',east_test_point
-    print 'north_test_point=',north_test_point
+    #print 'east test point=',east_test_point
+    #print 'north_test_point=',north_test_point
     
     if east_test_point == 0:
         #longitude increases most along the positive i axis
@@ -554,7 +562,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             u_n = nc_file_data['u_s'][:,j+1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j+1,i]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            u_agrid_rev = 0.5*(u_s + u_n)
+            #u_agrid_rev = 0.5*(u_s + u_n)
             
             #calculation of meridionial wind on first (west) D-grid point
             p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
@@ -573,7 +581,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             v_e = nc_file_data['u_w'][:,j,i+1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i+1]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            v_agrid_rev = 0.5*(v_w + v_e)
+            #v_agrid_rev = 0.5*(v_w + v_e)
         elif north_test_point == 3:
             #latitude increases most along the negative j axis
             # <--- j- north
@@ -597,7 +605,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             u_n = nc_file_data['u_s'][:,j-1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j-1,i]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            u_agrid_rev = 0.5*(u_s + u_n)
+            #u_agrid_rev = 0.5*(u_s + u_n)
             
             #calculation of meridionial wind on first (west) D-grid point
             p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
@@ -616,7 +624,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             v_e = nc_file_data['u_w'][:,j,i+1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i+1]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            v_agrid_rev = 0.5*(v_w + v_e)
+            #v_agrid_rev = 0.5*(v_w + v_e)
         else:
             print 'unknown grid orientation'
     elif east_test_point == 1:
@@ -644,7 +652,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             u_n = nc_file_data['u_s'][:,j+1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j+1,i]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            u_agrid_rev = 0.5*(u_s + u_n)
+            #u_agrid_rev = 0.5*(u_s + u_n)
             
             #calculation of meridionial wind on first (west) D-grid point
             p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
@@ -663,7 +671,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             v_e = nc_file_data['u_w'][:,j,i-1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i-1]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            v_agrid_rev = 0.5*(v_w + v_e)
+            #v_agrid_rev = 0.5*(v_w + v_e)
         elif north_test_point == 3:
             #latitude increases most along the negative j axis
             #     i- east
@@ -687,7 +695,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             u_n = nc_file_data['u_s'][:,j-1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j-1,i]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            u_agrid_rev = 0.5*(u_s + u_n)
+            #u_agrid_rev = 0.5*(u_s + u_n)
             
             #calculation of meridionial wind on first (west) D-grid point
             p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
@@ -706,7 +714,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             v_e = nc_file_data['u_w'][:,j,i-1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j,i-1]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            v_agrid_rev = 0.5*(v_w + v_e)
+            #v_agrid_rev = 0.5*(v_w + v_e)
         else:
             print 'unknown grid orientation'
     elif east_test_point == 2:
@@ -734,7 +742,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             u_n = nc_file_data['u_s'][:,j,i+1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i+1]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            u_agrid_rev = 0.5*(u_s + u_n)
+            #u_agrid_rev = 0.5*(u_s + u_n)
             
             #calculation of meridionial wind on first (west) D-grid point
             p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
@@ -753,7 +761,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             v_e = nc_file_data['u_w'][:,j+1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j+1,i]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            v_agrid_rev = 0.5*(v_w + v_e)
+            #v_agrid_rev = 0.5*(v_w + v_e)
         elif north_test_point == 1:
             #latitude increases most along the negative i axis
             #     i- north
@@ -777,7 +785,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             u_n = nc_file_data['u_s'][:,j,i-1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i-1]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            u_agrid_rev = 0.5*(u_s + u_n)
+            #u_agrid_rev = 0.5*(u_s + u_n)
             
             #calculation of meridionial wind on first (west) D-grid point
             p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
@@ -796,7 +804,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             v_e = nc_file_data['u_w'][:,j+1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j+1,i]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            v_agrid_rev = 0.5*(v_w + v_e)
+            #v_agrid_rev = 0.5*(v_w + v_e)
         else:
             print 'unknown grid orientation'
     elif east_test_point == 3:
@@ -824,7 +832,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             u_n = nc_file_data['u_s'][:,j,i+1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i+1]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            u_agrid_rev = 0.5*(u_s + u_n)
+            #u_agrid_rev = 0.5*(u_s + u_n)
             
             #calculation of meridionial wind on first (west) D-grid point
             p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
@@ -843,7 +851,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             v_e = nc_file_data['u_w'][:,j-1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j-1,i]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            v_agrid_rev = 0.5*(v_w + v_e)
+            #v_agrid_rev = 0.5*(v_w + v_e)
         elif north_test_point == 1:
             #latitude increases most along the negative i axis
             #     i- north
@@ -867,7 +875,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             u_n = nc_file_data['u_s'][:,j,i-1]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_s'][:,j,i-1]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            u_agrid_rev = 0.5*(u_s + u_n)
+            #u_agrid_rev = 0.5*(u_s + u_n)
             
             #calculation of meridionial wind on first (west) D-grid point
             p1 = np.asarray((lon_super[2*i,2*j],lat_super[2*i,2*j]))
@@ -886,12 +894,26 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             v_e = nc_file_data['u_w'][:,j-1,i]*fv3_remap.inner_prod(e1, ex) + nc_file_data['v_w'][:,j-1,i]*fv3_remap.inner_prod(e1, ey)
             
             #calculation of zonal wind on A-grid (simple average for now)
-            v_agrid_rev = 0.5*(v_w + v_e)
+            #v_agrid_rev = 0.5*(v_w + v_e)
         else:
             print 'unknown grid orientation'
     
-    print 'u (A-grid)', u_agrid_rev
-    print 'v (A-grid)', v_agrid_rev
+    #print 'u (A-grid)', u_agrid_rev
+    #print 'v (A-grid)', v_agrid_rev
+    
+    u_s_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], u_s[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, -1, 8, ptop_data)
+    u_n_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], u_n[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, -1, 8, ptop_data)
+    v_w_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], v_w[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, -1, 8, ptop_data)
+    v_e_model_rev = fv3_remap.mappm(levp_data, pressure_from_data_rev[np.newaxis, :], v_e[np.newaxis, :], nlevs_model, pressure_model_interfaces_rev[np.newaxis, :], 1, 1, -1, 8, ptop_data)
+    
+    u_model_rev = np.zeros(nlevs_model)
+    v_model_rev = np.zeros(nlevs_model)
+    #print u_s_model_rev
+    u_model_rev = 0.5*(u_s_model_rev + u_n_model_rev)
+    v_model_rev = 0.5*(v_w_model_rev + v_e_model_rev)
+    
+    #print 'u (A-grid) on model levels', u_model_rev
+    #print 'v (A-grid) on model levels', v_model_rev
     
     #STILL NEED TO PUT u,v (A-grid) ON MODEL LAYER CENTERS!!!
         
@@ -899,52 +921,52 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
     nc_file_data.close()
     nc_file_sfc.close()
     
-    dyn_filename_pattern = 'dynf*.tile{0}.nc'.format(tile)
-    phy_filename_pattern = 'phyf*.tile{0}.nc'.format(tile)
-    
-    dyn_filenames = []
-    phy_filenames = []
-    for f_name in os.listdir(forcing_dir):
-       if fnmatch.fnmatch(f_name, dyn_filename_pattern):
-          dyn_filenames.append(f_name)
-       if fnmatch.fnmatch(f_name, phy_filename_pattern):
-          phy_filenames.append(f_name)
-    if not dyn_filenames:
-        message = 'No filenames matching the pattern {0} found in {1}'.format(dyn_filename_pattern,dir)
-        logging.critical(message)
-        raise Exception(message)
-    if not phy_filenames:
-        message = 'No filenames matching the pattern {0} found in {1}'.format(phy_filename_pattern,dir)
-        logging.critical(message)
-        raise Exception(message)
-    dyn_filenames = sorted(dyn_filenames)
-    phy_filenames = sorted(phy_filenames)
-    
-    if (len(dyn_filenames) != len(phy_filenames)):
-        message = 'The number of dyn files and phy files in {0} matching the patterns does not match.'.format(dir)
-        logging.critical(message)
-        raise Exception(message)
-    
-    n_files = len(dyn_filenames)
-    
-    u_layers = []
-    v_layers = []
-    time_dyn_hours = []
-    for filename in dyn_filenames:
-        nc_file = Dataset('{0}/{1}'.format(forcing_dir,filename))
-        
-        nlevs=len(nc_file.dimensions['pfull'])
-        
-        u_layers.append(nc_file['ugrd'][0,:,j,i])
-        v_layers.append(nc_file['vgrd'][0,:,j,i])
-            
-        time_dyn_hours.append(nc_file['time'][0])
-        
-        nc_file.close()
-    u_layers = np.asarray(u_layers)
-    v_layers = np.asarray(v_layers)
-    print 'u from dyn file', u_layers[0]
-    print 'v from dyn file',v_layers[0]
+    # dyn_filename_pattern = 'dynf*.tile{0}.nc'.format(tile)
+    # phy_filename_pattern = 'phyf*.tile{0}.nc'.format(tile)
+    # 
+    # dyn_filenames = []
+    # phy_filenames = []
+    # for f_name in os.listdir(forcing_dir):
+    #    if fnmatch.fnmatch(f_name, dyn_filename_pattern):
+    #       dyn_filenames.append(f_name)
+    #    if fnmatch.fnmatch(f_name, phy_filename_pattern):
+    #       phy_filenames.append(f_name)
+    # if not dyn_filenames:
+    #     message = 'No filenames matching the pattern {0} found in {1}'.format(dyn_filename_pattern,dir)
+    #     logging.critical(message)
+    #     raise Exception(message)
+    # if not phy_filenames:
+    #     message = 'No filenames matching the pattern {0} found in {1}'.format(phy_filename_pattern,dir)
+    #     logging.critical(message)
+    #     raise Exception(message)
+    # dyn_filenames = sorted(dyn_filenames)
+    # phy_filenames = sorted(phy_filenames)
+    # 
+    # if (len(dyn_filenames) != len(phy_filenames)):
+    #     message = 'The number of dyn files and phy files in {0} matching the patterns does not match.'.format(dir)
+    #     logging.critical(message)
+    #     raise Exception(message)
+    # 
+    # n_files = len(dyn_filenames)
+    # 
+    # u_layers = []
+    # v_layers = []
+    # time_dyn_hours = []
+    # for filename in dyn_filenames:
+    #     nc_file = Dataset('{0}/{1}'.format(forcing_dir,filename))
+    # 
+    #     nlevs=len(nc_file.dimensions['pfull'])
+    # 
+    #     u_layers.append(nc_file['ugrd'][0,:,j,i])
+    #     v_layers.append(nc_file['vgrd'][0,:,j,i])
+    # 
+    #     time_dyn_hours.append(nc_file['time'][0])
+    # 
+    #     nc_file.close()
+    # u_layers = np.asarray(u_layers)
+    # v_layers = np.asarray(v_layers)
+    # print 'u from dyn file', u_layers[0]
+    # print 'v from dyn file',v_layers[0]
     
     # if old_chgres: 
     #      #temperature
@@ -973,7 +995,7 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
             
     
 
-    exit()
+    
     
         
     #put data in a dictionary
@@ -989,17 +1011,41 @@ def get_UFS_state_data(vgrid, dir, forcing_dir, tile, i, j, old_chgres):
     #         "p_surf": ps
     #     }
     # else:
+    
+    # print zh_rev[::-1]
+    # print u_model_rev[0][::-1]
+    # print v_model_rev[0][::-1]
+    # print sphum_model_rev[0][::-1]
+    # print o3_model_rev[0][::-1]
+    # print liqwat_model_rev[0][::-1]
+    # print ps_calc
+    # print temp_model_rev[::-1]
+    # print pressure_model_interfaces_rev[::-1]
+    
+    
+    pressure_model_interfaces = pressure_model_interfaces_rev[::-1]
+    pressure_model = np.zeros(nlevs_model)
+    for k in range(0,nlevs_model):
+        #from gmtb_scm_vgrid
+        pressure_model[k] = ((1.0/(rocp+1.0))*(pressure_model_interfaces[k]**(rocp+1.0) - pressure_model_interfaces[k+1]**(rocp+1.0))/(pressure_model_interfaces[k] - pressure_model_interfaces[k+1]))**(1.0/rocp)
+    
+    #print pressure_model
+    
+    
+    #exit()
+    
     state = {
-        "nlevs": nlevs,
-        "z": zh,
-        "u": ucomp,
-        "v": vcomp,
-        "qv": sphum,
-        "o3": o3,
-        "ql": liqwat,
-        "p_surf": ps,
-        "T": t,
-        "pres": p
+        "nlevs": nlevs_model,
+        "z": zh_rev[::-1],
+        "u": u_model_rev[0][::-1],
+        "v": v_model_rev[0][::-1],
+        "qv": sphum_model_rev[0][::-1],
+        "o3": o3_model_rev[0][::-1],
+        "ql": liqwat_model_rev[0][::-1],
+        "p_surf": ps_calc,
+        "T": temp_model_rev[::-1],
+        "pres": pressure_model,
+        "pres_i": pressure_model_interfaces
     }
         
     return state
@@ -1315,6 +1361,90 @@ def get_UFS_forcing_data(nlevs, state, dir, tile, i, j):
     
     dummy = np.zeros(1)
     
+    # print(state["pres_i"])
+    # print(p_interfaces[0])
+    # print(p_interfaces[1])
+    # 
+    # print(state["pres"])
+    # print(p_layers[0])
+    # print(p_layers[1])
+    # 
+    # print(state["T"])
+    # print(t_layers[0])
+    # print(t_layers[1])
+    # 
+    # print(dt3dt_nophys[0])
+    # print(dt3dt_nophys[1])
+    # 
+    # print(state["qv"])
+    # print(qv_layers[0])
+    # print(qv_layers[1])
+    
+    dtdt_adv = np.zeros([n_files,p_layers.shape[1]])
+    dqvdt_adv = np.zeros([n_files,p_layers.shape[1]])
+    valid_pres_adv = np.zeros([n_files,p_layers.shape[1]])
+    valid_pres_i_adv = np.zeros([n_files,p_interfaces.shape[1]])
+    
+    #handle forcing from initialization to the first history file
+    tv_layers_remap_1 = np.zeros([1,t_layers.shape[1]])
+    qv_layers_remap_1 = np.zeros([1,qv_layers.shape[1]])
+    
+    #calculate new Tv at first history file time due to remapping
+    tv_rev = np.zeros([1,tv_layers.shape[1]])
+    log_pres_init_rev = np.zeros([1,len(state["pres_i"])])
+    log_pres_1_rev = np.zeros([1,p_interfaces.shape[1]])
+    
+    tv_init = state["T"]*(1.0 + zvir*state["qv"])
+    tv_init_rev = tv_init[::-1]
+    log_pres_init_rev[0,:] = np.log(state["pres_i"][::-1])
+    log_pres_1_rev[0,:] = np.log(p_interfaces[0,::-1])
+    
+    qv_rev = np.zeros([1,qv_layers.shape[1]])
+    pres_init_rev = np.zeros([1,len(state["pres_i"])])
+    pres_1_rev = np.zeros([1,p_interfaces.shape[1]])
+    
+    qv_init_rev = state["qv"][::-1]
+    pres_init_rev[0,:] = state["pres_i"][::-1]
+    pres_1_rev[0,:] = p_interfaces[0,::-1]
+    
+    tv_rev_new = fv3_remap.map_scalar(len(tv_init_rev), log_pres_init_rev, tv_init_rev[np.newaxis, :], dummy, len(tv_init_rev), log_pres_1_rev, 0, 0, 1, np.abs(kord_tm), t_min)
+    tv_layers_remap_1[0,:] = tv_rev_new[0,::-1]
+    
+    dp2 = np.zeros([1,qv_rev.shape[1]])
+    for k in range(0,qv_rev.shape[1]):
+        dp2[0,k] = pres_1_rev[0,k+1] - pres_1_rev[0,k]
+    
+    qv_rev_new = fv3_remap.map1_q2(len(qv_init_rev), pres_init_rev, qv_init_rev[np.newaxis, :], len(qv_init_rev), pres_1_rev, dp2, 0, 0, 0, kord_tr, q_min)
+    qv_layers_remap_1[0,:] = qv_rev_new[0,::-1]
+    
+    t_layers_remap_1 = tv_layers_remap_1/(1.0 + zvir*qv_layers_remap_1)
+    
+    # print state["T"]
+    # print t_layers_remap_1[0]
+    # print t_layers[0,:]
+    # 
+    # print state["qv"]
+    # print qv_layers_remap_1[0]
+    # print qv_layers[0,:]
+    
+    dtdt_remap_1 = np.zeros([1,t_layers.shape[1]])
+    #dtdt_adv_1 = np.zeros([1,t_layers.shape[1]])
+    dqvdt_remap_1 = np.zeros([1,qv_layers.shape[1]])
+    #dqvdt_adv_1 = np.zeros([1,qv_layers.shape[1]])
+    
+    valid_pres_adv[0,:] = state["pres"]
+    valid_pres_i_adv[0,:] = state["pres_i"]
+    
+    dqvdt_remap_1[0,:] = (qv_layers_remap_1[0,:] - state["qv"][:])/(3600.0*(time_dyn_hours[0]))
+    print(dqvdt_remap_1[0,:])
+    dqvdt_adv[0,:] = dq3dt_nophys[0,:] - dqvdt_remap_1[0,:]  #valid at state["pres"] levels
+    print(dqvdt_adv[0,:])
+    
+    dtdt_remap_1[0,:] = (t_layers_remap_1[0,:] - state["T"][:])/(3600.0*(time_dyn_hours[0]))
+    print(dtdt_remap_1[0,:])
+    dtdt_adv[0,:] = dt3dt_nophys[0,:] - dtdt_remap_1[0,:]  #valid at state["pres"] levels
+    print(dtdt_adv[0,:])
+    
     tv_layers_remap = np.zeros([t_layers.shape[0],t_layers.shape[1]])
     qv_layers_remap = np.zeros([qv_layers.shape[0],qv_layers.shape[1]])
     for t in range(t_layers.shape[0]-1):
@@ -1351,23 +1481,47 @@ def get_UFS_forcing_data(nlevs, state, dir, tile, i, j):
     t_layers_remap = tv_layers_remap/(1.0 + zvir*qv_layers_remap)
     
     dtdt_remap = np.zeros([t_layers.shape[0]-1,t_layers.shape[1]])
-    dtdt_adv = np.zeros([t_layers.shape[0]-1,t_layers.shape[1]])
     dqvdt_remap = np.zeros([qv_layers.shape[0]-1,qv_layers.shape[1]])
-    dqvdt_adv = np.zeros([qv_layers.shape[0]-1,qv_layers.shape[1]])
     for t in range(t_layers.shape[0]-1):
+        valid_pres_adv[t+1,:] = p_layers[t]
+        valid_pres_i_adv[t+1,:] = p_interfaces[t]
         dqvdt_remap[t,:] = (qv_layers_remap[t+1,:] - qv_layers[t,:])/(3600.0*(time_dyn_hours[t+1] - time_dyn_hours[t]))
-        dqvdt_adv[t,:] = dq3dt_nophys[t+1,:] - dqvdt_remap[t,:]  #valid at p_layers[t]
+        print(dqvdt_remap[t,:])
+        dqvdt_adv[t+1,:] = dq3dt_nophys[t+1,:] - dqvdt_remap[t,:]  #valid at p_layers[t]
+        print(dqvdt_adv[t+1,:])
         dtdt_remap[t,:] = (t_layers_remap[t+1,:] - t_layers[t,:])/(3600.0*(time_dyn_hours[t+1] - time_dyn_hours[t]))
-        dtdt_adv[t,:] = dt3dt_nophys[t+1,:] - dtdt_remap[t,:]  #valid at p_layers[t]
+        print(dtdt_remap[t,:])
+        dtdt_adv[t+1,:] = dt3dt_nophys[t+1,:] - dtdt_remap[t,:]  #valid at p_layers[t]
+        print(dtdt_adv[t+1,:])
     
-    for t in range(t_layers.shape[0]-1):
+    for t in range(n_files):
         print "time = ", t
-        pres_1_rev = p_interfaces[t,::-1]
-        pres_2_rev = p_interfaces[t+1,::-1]
+        #pres_1_rev = p_interfaces[t,::-1]
+        #pres_2_rev = p_interfaces[t+1,::-1]
         for k in range(t_layers.shape[1]):
-            print "k = ",k,"dqvdt_adv=",dqvdt_adv[t,k],dqvdt_adv[t,k]/dq3dt_nophys[t+1,k],"dtdt_adv=",dtdt_adv[t,k],dtdt_adv[t,k]/dt3dt_nophys[t+1,k]
-            print pres_2_rev[k], pres_2_rev[k] - pres_1_rev[k]
-            
+            print "k = ",k,"dqvdt_adv=",dqvdt_adv[t,k],dqvdt_adv[t,k]/dq3dt_nophys[t,k],"dtdt_adv=",dtdt_adv[t,k],dtdt_adv[t,k]/dt3dt_nophys[t,k],valid_pres_adv[t,k]
+            #print pres_2_rev[k], pres_2_rev[k] - pres_1_rev[k]
+    
+    #for the original SCM forcing input file, all forcing terms should be valid on the initial pressure levels;
+    #one should be able to use fv3_remap.map_scalar to remap these forcing terms to the initial pressure profile, rather
+    #than resort to linear interpolation or something else.
+    #(this interpolation can be removed when using DEPHY, that allows for varying pressure levels for forcing)
+    
+    dqvdt_adv_at_init_pres_rev = np.zeros([n_files,1,p_layers.shape[1]])
+    dtdt_adv_at_init_pres_rev = np.zeros([n_files,1,p_layers.shape[1]])
+    from_log_pres_rev = np.zeros([1,len(state["pres_i"])])
+    to_log_pres_rev = np.zeros([1,len(state["pres_i"])])
+    
+    dqvdt_adv_at_init_pres_rev[0,0,:] = dqvdt_adv[0,::-1]
+    dtdt_adv_at_init_pres_rev[0,0,:] = dtdt_adv[0,::-1]
+    for t in range(1,n_files): #don't need to remap the first time interval because it is already valid at the initial pressure levels
+        from_log_pres_rev[0,:] = np.log(valid_pres_i_adv[t,::-1])
+        to_log_pres_rev[0,:] = np.log(valid_pres_i_adv[0,::-1])
+        dqvdt_adv_at_init_pres_rev[t,:,:] = fv3_remap.map_scalar(p_layers.shape[1], from_log_pres_rev, dqvdt_adv[t,np.newaxis,::-1], dummy, p_layers.shape[1], to_log_pres_rev, 0, 0, 1, 1, 0.0)
+        dtdt_adv_at_init_pres_rev[t,:,:] = fv3_remap.map_scalar(p_layers.shape[1], from_log_pres_rev, dtdt_adv[t,np.newaxis,::-1], dummy, p_layers.shape[1], to_log_pres_rev, 0, 0, 1, 1, 0.0)
+    
+    dtdt_adv_at_init_pres = dtdt_adv_at_init_pres_rev[:,0,::-1]
+    dqvdt_adv_at_init_pres = dqvdt_adv_at_init_pres_rev[:,0,::-1]
     
     #if we had dynf,phyf files at every timestep (and the SCM timestep is made to match the UFS), then dqvdt_adv should be
     #applied uninterpolated for each time step. If dynf and phyf files represent time averages over the previous diagnostic period,
@@ -1376,11 +1530,102 @@ def get_UFS_forcing_data(nlevs, state, dir, tile, i, j):
     #be equal to what is derived from dynf/phyf. (preference should be to have option to remove time-interpolation of forcing such
     #that the constant forcing applied converged to time-step values as the diag interval approaches the time step)    
     
-    exit()
+    #time_method = 'constant_simple'
+    time_method = 'constant_interp'
+    #time_method = 'gradient'
     
-    ntimes = 1
+    if (time_method == 'constant_simple'):
+        print 'Forcing should not be interpolated in time. Rather, forcing should held constant at their current values until the next forcing interval is reached.'
+        ntimes = n_files
+        time = np.zeros(ntimes)
+        h_advec_thil = np.zeros((nlevs,ntimes),dtype=float)
+        h_advec_qt = np.zeros((nlevs,ntimes),dtype=float)
         
-    time = np.zeros(ntimes)
+        h_advec_qt[:,0] = dqvdt_adv_at_init_pres[0,:]
+        for k in range(nlevs):
+            h_advec_thil[k,0] = (p0/state["pres"][k])**kappa*dtdt_adv_at_init_pres[0,k]
+        
+        for t in range(1,n_files):
+            time[t] = 3600.0*time_dyn_hours[t-1]
+            h_advec_qt[:,t] = dqvdt_adv_at_init_pres[t,:]
+            for k in range(nlevs):
+                h_advec_thil[k,t] = (p0/state["pres"][k])**kappa*dtdt_adv_at_init_pres[t,k]
+        for t in range(n_files):
+             print h_advec_qt[:,t]
+             print dqvdt_adv_at_init_pres[t,:]
+             print h_advec_thil[:,t]
+    elif (time_method == 'constant_interp'):
+        print 'Forcing can be interpolated in time, but the time values are chosen such that forcing will effectively be held consant during a diagnostic time interval.'
+        ntimes = 2*n_files
+        
+        time_setback = 1.0 #s
+        
+        time = np.zeros(ntimes)
+        h_advec_thil = np.zeros((nlevs,ntimes),dtype=float)
+        h_advec_qt = np.zeros((nlevs,ntimes),dtype=float)
+        
+        time[0] = 0.0
+        time[1] = 3600.0*time_dyn_hours[0] - time_setback #forcing period should extend from beginning of diagnostic period to right BEFORE the next one
+        h_advec_qt[:,0] = dqvdt_adv_at_init_pres[0,:]
+        h_advec_qt[:,1] = h_advec_qt[:,0]
+        for k in range(nlevs):
+            h_advec_thil[k,0] = (p0/state["pres"][k])**kappa*dtdt_adv_at_init_pres[0,k]
+        h_advec_thil[:,1] = h_advec_thil[:,0]
+        
+        for t in range(1,n_files):
+            time[2*t] = 3600.0*time_dyn_hours[t-1]
+            time[2*t+1] = 3600*time_dyn_hours[t] - time_setback
+            
+            h_advec_qt[:,2*t] = dqvdt_adv_at_init_pres[t,:]
+            h_advec_qt[:,2*t+1] = h_advec_qt[:,2*t]
+            for k in range(nlevs):
+                h_advec_thil[k,2*t] = (p0/state["pres"][k])**kappa*dtdt_adv_at_init_pres[t,k]
+            h_advec_thil[:,2*t+1] = h_advec_thil[:,2*t]        
+        
+        for t in range(ntimes):
+             print time[t], h_advec_qt[:,t]
+             print h_advec_thil[:,t]
+        
+    elif (time_method == 'gradient'):
+        print 'Forcing can be interpolated in time since the forcing terms are assumed to follow a constant time-gradient.'
+        
+        ntimes = 2*n_files + 1
+        time = np.zeros(ntimes)
+        h_advec_thil = np.zeros((nlevs,ntimes),dtype=float)
+        h_advec_qt = np.zeros((nlevs,ntimes),dtype=float)
+        
+        h_advec_qt[:,0] = 0.0
+        h_advec_thil[:,0] = 0.0
+        
+        for t in range(n_files):
+            time[2*t + 1] = 0.5*3600.0*time_dyn_hours[t]
+            time[2*t + 2] = 3600.0*time_dyn_hours[t]
+            
+            h_advec_qt[:,2*t + 1] = dqvdt_adv_at_init_pres[t,:]
+            for k in range(nlevs):
+                h_advec_thil[k,2*t + 1] = (p0/state["pres"][k])**kappa*dtdt_adv_at_init_pres[t,k]
+            
+            #calculate gradient in time and extrapolate for time (2t + 2)
+            for k in range(nlevs):
+                grad = (h_advec_qt[k,2*t + 1] - h_advec_qt[k, 2*t])/(time[2*t + 1] - time[2*t])
+                h_advec_qt[k,2*t + 2] = h_advec_qt[k,2*t+1] + grad*(time[2*t + 2] - time[2*t + 1])
+                
+                grad = (h_advec_thil[k,2*t + 1] - h_advec_thil[k, 2*t])/(time[2*t + 1] - time[2*t])
+                h_advec_thil[k,2*t + 2] = h_advec_thil[k,2*t+1] + grad*(time[2*t + 2] - time[2*t + 1])
+        
+        for t in range(ntimes):
+             print time[t], h_advec_qt[:,t]
+             print h_advec_thil[:,t]
+        
+        for t in range(n_files):
+            print t, dqvdt_adv_at_init_pres[t,:]
+            print dtdt_adv_at_init_pres[t,:]
+                    
+    else:
+        print 'Unrecognized forcing time method. Exiting.'
+        exit()
+        
+    #time = np.zeros(ntimes)
     w_ls = np.zeros((nlevs,ntimes),dtype=float)
     omega = np.zeros((nlevs,ntimes),dtype=float)
     u_g = np.zeros((nlevs,ntimes),dtype=float)
@@ -1391,9 +1636,9 @@ def get_UFS_forcing_data(nlevs, state, dir, tile, i, j):
     thil_nudge = np.zeros((nlevs,ntimes),dtype=float)
     qt_nudge = np.zeros((nlevs,ntimes),dtype=float)
     rad_heating = np.zeros((nlevs,ntimes),dtype=float)
-    h_advec_thil = np.zeros((nlevs,ntimes),dtype=float)
+    #h_advec_thil = np.zeros((nlevs,ntimes),dtype=float)
     v_advec_thil = np.zeros((nlevs,ntimes),dtype=float)
-    h_advec_qt = np.zeros((nlevs,ntimes),dtype=float)
+    #h_advec_qt = np.zeros((nlevs,ntimes),dtype=float)
     v_advec_qt = np.zeros((nlevs,ntimes),dtype=float)
     
     forcing = {
@@ -2347,8 +2592,6 @@ def main():
     
     #get UFS IC data (TODO: flag to read in RESTART data rather than IC data and implement different file reads)
     (state_data, surface_data, oro_data) = get_UFS_IC_data(in_dir, forcing_dir, tile, tile_i, tile_j, old_chgres)
-    
-    exit()
     
     #cold start NoahMP variables
     if (noahmp):
