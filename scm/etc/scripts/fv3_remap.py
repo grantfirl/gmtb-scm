@@ -1311,6 +1311,145 @@ def mappm (km, pe1, q1, kn, pe2, i1, i2, iv, kord, ptop):
     
   return q2
 
+def map1_ppm(km, pe1, q1, qs, kn, pe2, i1, i2, iv, kord):
+# subroutine map1_ppm( km,   pe1,    q1,   qs,           &
+#                       kn,   pe2,    q2,   i1, i2,       &
+#                       j,    ibeg, iend, jbeg, jend, iv,  kord)
+#  integer, intent(in) :: i1                !< Starting longitude
+#  integer, intent(in) :: i2                !< Finishing longitude
+#  integer, intent(in) :: iv                !< Mode: 0 == constituents 1 == ??? 2 == remap temp with cs scheme
+#  integer, intent(in) :: kord              !< Method order
+#  integer, intent(in) :: j                 !< Current latitude
+#  integer, intent(in) :: ibeg, iend, jbeg, jend
+#  integer, intent(in) :: km                !< Original vertical dimension
+#  integer, intent(in) :: kn                !< Target vertical dimension
+#  real, intent(in) ::   qs(i1:i2)       !< bottom BC
+#  real, intent(in) ::  pe1(i1:i2,km+1)  !< pressure at layer edges from model top to bottom surface in the original vertical coordinate
+#  real, intent(in) ::  pe2(i1:i2,kn+1)  !< pressure at layer edges from model top to bottom surface in the new vertical coordinate
+#  real, intent(in) ::    q1(ibeg:iend,jbeg:jend,km) !< Field input
+# ! INPUT/OUTPUT PARAMETERS:
+#  real, intent(inout)::  q2(ibeg:iend,jbeg:jend,kn) !< Field output
+# 
+# ! DESCRIPTION:
+# ! IV = 0: constituents
+# ! pe1: pressure at layer edges (from model top to bottom surface)
+# !      in the original vertical coordinate
+# ! pe2: pressure at layer edges (from model top to bottom surface)
+# !      in the new vertical coordinate
+# 
+# ! LOCAL VARIABLES:
+#    real    dp1(i1:i2,km)
+#    real   q4(4,i1:i2,km)
+#    real    pl, pr, qsum, dp, esl
+#    integer i, k, l, m, k0
+# 
+  im = i2 - i1 + 1
+  q2 = np.zeros([im,kn])
+  
+  qs = np.zeros([im])
+  dp1 = np.zeros([im,km])
+  q4 = np.zeros([4,im,km])
+  
+  for k in range(0,km):
+      for i in range(i1-1,i2):
+          dp1[i,k] = pe1[i,k+1] - pe1[i,k]
+          q4[0,i,k] = q1[i,k]
+# ! Compute vertical subgrid distribution
+  if (kord > 7):
+      q4 = cs_profile( qs, q4, dp1, km, i1, i2, iv, kord )
+  else:
+      q4 = ppm_profile( q4, dp1, km, i1, i2, iv, kord )
+
+  for i in range(i1-1,i2):
+      k0 = 0
+      for k in range(0,kn):
+          next_k = False
+          for l in range(k0,km):
+              # ! locate the top edge: pe2(i,k)
+              if( pe2[i,k] >= pe1[i,l] and pe2[i,k] <= pe1[i,l+1] ):
+                  pl = (pe2[i,k]-pe1[i,l]) / dp1[i,l]
+                  if( pe2[i,k+1] <= pe1[i,l+1] ):
+                      # ! entire new grid is within the original grid
+                      pr = (pe2[i,k+1]-pe1[i,l]) / dp1[i,l]
+                      q2[i,k] = q4[1,i,l] + 0.5*(q4[3,i,l]+q4[2,i,l]-q4[1,i,l])*(pr+pl)-q4[3,i,l]*r3*(pr*(pr+pl)+pl**2)
+                      k0 = l
+                      next_k = True
+                      #print 'new grid within old; q2 = ', q2[i,k]
+                      break
+                      #goto 555 #next k-loop iteration
+                  else:
+                      # ! Fractional area...
+                      qsum = (pe1[i,l+1]-pe2[i,k])*(q4[1,i,l]+0.5*(q4[3,i,l]+q4[2,i,l]-q4[1,i,l])*(1.+pl)-q4[3,i,l]*(r3*(1.+pl*(1.+pl))))
+                      for m in range(l+1,km): # was do m = l+1,km
+                          # ! locate the bottom edge: pe2(i,k+1)
+                          if( pe2[i,k+1] > pe1[i,m+1] ):
+                              # ! Whole layer
+                              qsum = qsum + dp1[i,m]*q4[0,i,m]
+                          else:
+                              dp = pe2[i,k+1]-pe1[i,m]
+                              esl = dp / dp1[i,m]
+                              qsum = qsum + dp*(q4[1,i,m]+0.5*esl*(q4[2,i,m]-q4[1,i,m]+q4[3,i,m]*(1.-r23*esl)))
+                              k0 = m
+                          #   goto 123
+                              break
+                      else:
+                          #GJF: the following if statement is not in the fv_mapz, but it captures the case where pe2[kn] > pe1[km] where the m loop is not entered; without this, the lowest layer values are weird
+                          if (l+1 == km):
+                               dp = pe2[i,kn]-pe1[i,km]
+                               esl = dp / dp1[i,km-1]
+                               qsum = qsum + dp*(q4[1,i,km-1]+0.5*esl*(q4[2,i,km-1]-q4[1,i,km-1]+q4[3,i,km-1]*(1.-r23*esl)))
+                          break
+                      
+                      break
+                      #goto 123 #end l-loop
+          if not next_k:
+              q2[i,k] = qsum / ( pe2[i,k+1] - pe2[i,k] ) #formerly labeled 123
+              
+  return q2           
+# 
+#   do i=i1,i2
+#      k0 = 1
+#      do 555 k=1,kn
+#       do l=k0,km
+# ! locate the top edge: pe2(i,k)
+#       if( pe2(i,k) >= pe1(i,l) .and. pe2(i,k) <= pe1(i,l+1) ) then
+#          pl = (pe2(i,k)-pe1(i,l)) / dp1(i,l)
+#          if( pe2(i,k+1) <= pe1(i,l+1) ) then
+# ! entire new grid is within the original grid
+#             pr = (pe2(i,k+1)-pe1(i,l)) / dp1(i,l)
+#             q2(i,j,k) = q4(2,i,l) + 0.5*(q4(4,i,l)+q4(3,i,l)-q4(2,i,l))  &
+#                        *(pr+pl)-q4(4,i,l)*r3*(pr*(pr+pl)+pl**2)
+#                k0 = l
+#                goto 555
+#          else
+# ! Fractional area...
+#             qsum = (pe1(i,l+1)-pe2(i,k))*(q4(2,i,l)+0.5*(q4(4,i,l)+   &
+#                     q4(3,i,l)-q4(2,i,l))*(1.+pl)-q4(4,i,l)*           &
+#                      (r3*(1.+pl*(1.+pl))))
+#               do m=l+1,km
+# ! locate the bottom edge: pe2(i,k+1)
+#                  if( pe2(i,k+1) > pe1(i,m+1) ) then
+# ! Whole layer
+#                      qsum = qsum + dp1(i,m)*q4(1,i,m)
+#                  else
+#                      dp = pe2(i,k+1)-pe1(i,m)
+#                      esl = dp / dp1(i,m)
+#                      qsum = qsum + dp*(q4(2,i,m)+0.5*esl*               &
+#                            (q4(3,i,m)-q4(2,i,m)+q4(4,i,m)*(1.-r23*esl)))
+#                      k0 = m
+#                      goto 123
+#                  endif
+#               enddo
+#               goto 123
+#          endif
+#       endif
+#       enddo
+# 123   q2(i,j,k) = qsum / ( pe2(i,k+1) - pe2(i,k) )
+# 555   continue
+#   enddo
+# 
+#  end subroutine map1_ppm
+
 def fillq(im, km, nq, q, dp):
   
   for ic in range(0,nq):
