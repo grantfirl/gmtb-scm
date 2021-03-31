@@ -13,5 +13,10 @@ default_tracers = {"SCM_GFS_v15p2":"tracers_GFS_v15p2.txt",
                    "SCM_GFS_v15p2_ACM":"tracers_GFS_v15p2.txt",
                    "HAFS_v0_hwrf":"tracers_HAFS_v0_hwrf.txt",
                    "HAFS_v0_hwrf_thompson":"tracers_HAFS_v0_hwrf_thompson.txt",
-                   "SCM_RRFS_v1beta":"tracers_RRFS_v1beta.txt"
+                   "SCM_RRFS_v1beta":"tracers_RRFS_v1beta.txt",
+                   "PAS_GFS_v16beta":"tracers_GFS_v16beta.txt",
+                   "PAS_GFS_v16beta_no_cumulus":"tracers_GFS_v16beta.txt",
+                   "PAS_GFS_v16beta_no_deepcu":"tracers_GFS_v16beta.txt",
+                   "PAS_RRFS_v1alpha":"tracers_RRFS_v1beta.txt",
+                   "PAS_RRFS_v1alpha_cumulus":"tracers_RRFS_v1beta.txt",
                   }

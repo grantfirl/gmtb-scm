@@ -14,5 +14,10 @@ default_physics_namelists = {"SCM_csawmg":"input_csawmg.nml",
                             "SCM_GFS_v15p2_ACM":"input_GFS_v15p2_ACM.nml",
                             "HAFS_v0_hwrf":"input_HAFS_v0_hwrf.nml",
                             "HAFS_v0_hwrf_thompson":"input_HAFS_v0_hwrf_thompson.nml",
-                            "SCM_RRFS_v1beta":"input_RRFS_v1beta.nml"
+                            "SCM_RRFS_v1beta":"input_RRFS_v1beta.nml",
+                            "PAS_GFS_v16beta":"input_PAS_GFS_v16beta.nml",
+                            "PAS_GFS_v16beta_no_cumulus":"input_PAS_GFS_v16beta_no_cumulus.nml",
+                            "PAS_GFS_v16beta_no_deepcu":"input_PAS_GFS_v16beta_no_deepcu.nml",
+                            "PAS_RRFS_v1alpha":"input_PAS_RRFS_v1alpha.nml",
+                            "PAS_RRFS_v1alpha_cumulus":"input_PAS_RRFS_v1alpha_cumulus.nml",
                             }
