@@ -20,7 +20,7 @@ scrfunc_dir=$( dirname "${scrfunc_fp}" )
 #
 #-----------------------------------------------------------------------
 #
-source ./source_util_funcs.sh
+source ${scrfunc_dir}/source_util_funcs.sh
 
 # This is an environment variable that 
 # Some of the functions/scripts sourced by source_util.funcs.sh look for
@@ -67,8 +67,8 @@ print_input_args valid_args
 #
 #-----------------------------------------------------------------------
 #
-scm_basedir=$( readlink -f "${scrfunc_dir}/../../" )
-bin_dir="${scrfunc_dir}"
+scm_basedir=$( readlink -f "${scrfunc_dir}/../" )
+bin_dir="${scm_basedir}/scm/bin"
 #
 #-----------------------------------------------------------------------
 #
