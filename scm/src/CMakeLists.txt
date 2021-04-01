@@ -91,6 +91,7 @@ ENDIF(DEFINED ENV{W3NCO_LIBd})
 
 SET(CCPP_SRC ${CMAKE_SOURCE_DIR}/../../ccpp/framework)
 SET(GFSPHYSICS_SRC ${CMAKE_SOURCE_DIR}/../../ccpp/physics)
+get_filename_component(PAS_DIR ${CMAKE_SOURCE_DIR}/../../PAS ABSOLUTE)
 
 # Use rpaths on MacOSX
 set(CMAKE_MACOSX_RPATH 1)
@@ -331,3 +332,15 @@ add_custom_command(
         COMMAND ${CMAKE_COMMAND} -E create_symlink
                 ${CMAKE_SOURCE_DIR}/multi_run_gmtb_scm.py
                 ${CMAKE_CURRENT_BINARY_DIR}/multi_run_gmtb_scm.py)
+
+add_custom_command(
+        TARGET gmtb_scm POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+                ${PAS_DIR}/pas_wrapper_run_gmtb_scm.sh
+                ${CMAKE_CURRENT_BINARY_DIR}/pas_wrapper_run_gmtb_scm.sh)
+
+add_custom_command(
+        TARGET gmtb_scm POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
+                ${PAS_DIR}/run_test_set.sh
+                ${CMAKE_CURRENT_BINARY_DIR}/run_test_set.sh)
