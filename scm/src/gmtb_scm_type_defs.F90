@@ -25,7 +25,7 @@ module gmtb_scm_type_defs
 
   implicit none
 
-  integer, parameter :: character_length = 80
+  integer, parameter :: character_length = 200
   integer, parameter :: int_zero = 0
   integer, parameter :: int_one = 1
   integer, parameter :: int_neg_one = -1
