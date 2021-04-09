@@ -87,12 +87,12 @@ function get_case_name_wwo_suffix() {
 #
 #-----------------------------------------------------------------------
 #
-  local len_suffix \
-        len_case_name \
-        len_case_name_without_suffix \
-        case_name_suffix \
-        case_name_without_suffix \
-        case_name_with_suffix
+  local __len_suffix \
+        __len_case_name \
+        __len_case_name_without_suffix \
+        __case_name_suffix \
+        __case_name_without_suffix \
+        __case_name_with_suffix
 #
 #-----------------------------------------------------------------------
 #
@@ -109,31 +109,31 @@ Please specify a non-empty case name and rerun."
 #
 #-----------------------------------------------------------------------
 #
-# Set case_name_suffix as follows.  If case_name is shorter than suffix,
-# then set case_name_suffix to case_name.  Otherwise, set it to the last
-# len_suffix characters of case_name, where len_suffix is the number of
-# characters in suffix. 
+# Set __case_name_suffix as follows.  If case_name is shorter than suffix,
+# then set __case_name_suffix to case_name.  Otherwise, set it to the 
+# last __len_suffix characters of case_name, where __len_suffix is the 
+# number of characters in suffix. 
 #
 #-----------------------------------------------------------------------
 #
-  len_suffix="${#suffix}"
-  len_case_name="${#case_name}"
+  __len_suffix="${#suffix}"
+  __len_case_name="${#case_name}"
 
-  case_name_suffix="${case_name}"
-  if [ "${len_case_name}" -gt "${len_suffix}" ]; then
-    case_name_suffix=${case_name: -${len_suffix}}
+  __case_name_suffix="${case_name}"
+  if [ "${__len_case_name}" -gt "${__len_suffix}" ]; then
+    __case_name_suffix=${case_name: -${__len_suffix}}
   fi
 #
 #-----------------------------------------------------------------------
 #
-# Consider the case in which the last len_suffix characters of case_name
+# Consider the case in which the last __len_suffix characters of case_name
 # are not equal to suffix, or the case in which case_name is shorter than
 # suffix.  In these cases, set the case name without suffix to case_name, 
 # and set the case name with suffix to case_name with suffix appended.
 #
 #-----------------------------------------------------------------------
 #
-  if [ "${case_name_suffix}" != "${suffix}" ]; then
+  if [ "${__case_name_suffix}" != "${suffix}" ]; then
 
     print_info_msg "
 The case name (case_name) does not end with the specified suffix (suffix):
@@ -143,12 +143,12 @@ Appending that string to case_name in order to obtain the counterpart of
 the case name that includes the suffix.
 "
 
-    case_name_without_suffix="${case_name}"
-    case_name_with_suffix="${case_name}${suffix}"
+    __case_name_without_suffix="${case_name}"
+    __case_name_with_suffix="${case_name}${suffix}"
 #
 #-----------------------------------------------------------------------
 #
-# Consider the case in which the last len_suffix characters of case_name
+# Consider the case in which the last __len_suffix characters of case_name
 # are equal to suffix.  This has sub-cases.
 #
 #
@@ -160,7 +160,7 @@ the case name that includes the suffix.
 # case, set the case name with suffix to case_name, and get the case namne
 # without suffix by removing the suffix from the end of case_name.
 #
-    if [ "${len_case_name}" -ne "${len_suffix}" ]; then
+    if [ "${__len_case_name}" -ne "${__len_suffix}" ]; then
 
       print_info_msg "
 The case name (case_name) ends with the specified suffix (suffix):
@@ -170,9 +170,9 @@ Removing the suffix from the end of case_name in order to obtain the
 counterpart of the case name without the suffix.
 "
 
-      len_case_name_without_suffix=$(( ${len_case_name} - ${len_suffix} ))
-      case_name_without_suffix="${case_name:0:${len_case_name_without_suffix}}"
-      case_name_with_suffix="${case_name}"
+      __len_case_name_without_suffix=$(( ${__len_case_name} - ${__len_suffix} ))
+      __case_name_without_suffix="${case_name:0:${__len_case_name_without_suffix}}"
+      __case_name_with_suffix="${case_name}"
 #
 # case_name ends with suffix and contains no other (preceeding) characters, 
 # i.e. it is exactly equal to suffix.  In this case, print out an error 
@@ -200,8 +200,8 @@ Please specify a case name that contains one or more characters before
 #
 #-----------------------------------------------------------------------
 #
-  eval ${output_varname_case_name_without_suffix}="${case_name_without_suffix}"
-  eval ${output_varname_case_name_with_suffix}="${case_name_with_suffix}"
+  eval ${output_varname_case_name_without_suffix}="${__case_name_without_suffix}"
+  eval ${output_varname_case_name_with_suffix}="${__case_name_with_suffix}"
 #
 #-----------------------------------------------------------------------
 #
