@@ -47,7 +47,8 @@ valid_args=( \
   "resol_km" \
   "dt_sec" \
   )
-process_args valid_args "$@"
+set_args_cmd=$( process_args valid_args "$@" )
+eval ${set_args_cmd}
 #
 #-----------------------------------------------------------------------
 #

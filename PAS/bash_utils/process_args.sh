@@ -113,6 +113,30 @@ function process_args() {
 #
 #-----------------------------------------------------------------------
 #
+# Get information about the script or function that calls this function.
+# Note that caller_name will be set as follows:
+#
+# 1) If the caller is a function, caller_name will be set to the name of
+#    that function.
+# 2) If the caller is a sourced script, caller_name will be set to
+#    "script".  Note that a sourced script cannot be the top level
+#    script since by defintion, it is sourced by another script or func-
+#    tion.
+# 3) If the caller is the top-level script, caller_name will be set to
+#    "main".
+#
+# Thus, if caller_name is set to "script" or "main", the caller is a
+# script, and if it is set to anything else, the caller is a function.
+#
+#-----------------------------------------------------------------------
+#
+  local caller_fp=$( readlink -f "${BASH_SOURCE[1]}" )
+  local caller_fn=$( basename "${caller_fp}" )
+  local caller_dir=$( dirname "${caller_fp}" )
+  local caller_name="${FUNCNAME[1]}"
+#
+#-----------------------------------------------------------------------
+#
 # Check arguments.
 #
 #-----------------------------------------------------------------------
@@ -168,6 +192,7 @@ where the arguments are defined as follows:
         i \
         valid_arg_name \
         valid_arg_name_no_spaces \
+        set_all_args_cmd \
         arg_already_specified \
         arg_val_pair \
         arg_name \
@@ -295,19 +320,45 @@ but the element with index i=${i} is empty:
 #
 #-----------------------------------------------------------------------
 #
+# Set the variable that determines whether the valid set of arguments
+# are to be set as local variables or global ones.
+#
+#-----------------------------------------------------------------------
+#
+  local local_or_null
+  if [ "${caller_name}" = "main" ] || \
+     [ "${caller_name}" = "script" ]; then
+    local_or_null=""
+  else
+    local_or_null="local"
+  fi
+#
+#-----------------------------------------------------------------------
+#
 # Initialize all valid arguments to the null string.  Note that the 
-# scope of this initialization is global, i.e. the calling script or 
-# function will be aware of these initializations.  Also, initialize
-# each element of the array arg_already_specified to "false".  This ar-
-# ray keeps track of whether each valid argument has already been set 
-# to a value by an arg-val specification.
+# scope of this initialization is global so that the calling script or
+# function will be aware of these initializations.  Also, initialize each
+# element of the array arg_already_specified to "false".  This array 
+# keeps track of whether each valid argument has already been set to a 
+# value by an arg-val specification.
 #
 #-----------------------------------------------------------------------
 #
   for (( i=0; i<${num_valid_args}; i++ )); do
+
     valid_arg_name="${valid_arg_names[$i]}"
-    eval ${valid_arg_name}=""
+
+    if [ "$i" -eq "0" ]; then
+      set_all_args_cmd="\
+${local_or_null} ${valid_arg_name}="
+    else
+      set_all_args_cmd="\
+${set_all_args_cmd} ;
+${local_or_null} ${valid_arg_name}="
+    fi
+
     arg_already_specified[$i]="false"
+
   done
 #
 #-----------------------------------------------------------------------
@@ -366,9 +417,13 @@ pair (arg_val_pair) is not valid:
         if [ "${arg_already_specified[$i]}" = "false" ]; then
           arg_already_specified[$i]="true"
           if [ "${is_array}" = "true" ]; then
-            eval ${arg_name}=${arg_value}
+            set_all_args_cmd="\
+${set_all_args_cmd} ;
+${local_or_null} ${arg_name}=${arg_value}"
           else
-            eval ${arg_name}=\"${arg_value}\"
+            set_all_args_cmd="\
+${set_all_args_cmd} ;
+${local_or_null} ${arg_name}=\"${arg_value}\""
           fi
         else
           cmd_line=$( printf "\'%s\' " "${@:1}" )
@@ -384,6 +439,15 @@ Please assign values to arguments only once on the command line."
     done
 
   done
+#
+#-----------------------------------------------------------------------
+#
+# Print out the string containing the command that must be executed to
+# set all the 
+#
+#-----------------------------------------------------------------------
+#
+  printf "%s" "${set_all_args_cmd}"
 #
 #-----------------------------------------------------------------------
 #
