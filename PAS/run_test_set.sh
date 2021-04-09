@@ -40,7 +40,6 @@ do_deep_conv_all=("true"    "true"    "true"    "false"    "false")
 do_shal_conv_all=("true"    "true"    "true"     "true"    "false")
 
 num_runs=${#resol_km_all[@]}
-#for (( i=0; i<2; i++ )); do    # For testing.
 for (( i=0; i<${num_runs}; i++ )); do
 
   do_deep_conv="${do_deep_conv_all[$i]}"
