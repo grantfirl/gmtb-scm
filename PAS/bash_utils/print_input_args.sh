@@ -99,7 +99,10 @@ function.
 #-----------------------------------------------------------------------
 #
   local array_name_valid_caller_args \
+        valid_arg_names_0th \
         valid_caller_args \
+        valid_caller_args_at \
+        num_valid_caller_args \
         script_or_function \
         msg \
         num_valid_args \
