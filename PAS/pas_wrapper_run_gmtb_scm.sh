@@ -82,21 +82,27 @@ print_input_args valid_args
 #
 #-----------------------------------------------------------------------
 #
-valid_vals_base_case_name=( \
-"arm_sgp_summer_1997_A" \
-"arm_sgp_summer_1997_B" \
-"arm_sgp_summer_1997_C" \
-"arm_sgp_summer_1997_R" \
-"arm_sgp_summer_1997_S" \
-"arm_sgp_summer_1997_T" \
-"arm_sgp_summer_1997_U" \
-"arm_sgp_summer_1997_X" \
-"twpice" \
-"my_case_01_SCM_driver" \
-"my_case_02_SCM_driver" \
-"my_case_03_SCM_driver" \
-"my_case_04_SCM_driver" \
-)
+# For now, do not specify a set of valid values for base_case_name in
+# order to avoid having to add a case name here every time a new case is
+# created from an FV3LAM forecast.  Other error messages (e.g. a missing
+# namelist file) will be reported if the case name passed to this script
+# via the command line doesn't actually exist in the SCM.
+#
+#valid_vals_base_case_name=( \
+#"arm_sgp_summer_1997_A" \
+#"arm_sgp_summer_1997_B" \
+#"arm_sgp_summer_1997_C" \
+#"arm_sgp_summer_1997_R" \
+#"arm_sgp_summer_1997_S" \
+#"arm_sgp_summer_1997_T" \
+#"arm_sgp_summer_1997_U" \
+#"arm_sgp_summer_1997_X" \
+#"twpice" \
+#"my_case_01_SCM_driver" \
+#"my_case_02_SCM_driver" \
+#"my_case_03_SCM_driver" \
+#"my_case_04_SCM_driver" \
+#)
 
 valid_vals_base_suite_name=( \
 "PAS_GFS_v16beta" \
@@ -129,7 +135,9 @@ valid_vals_resol_km=( \
 #
 #-----------------------------------------------------------------------
 #
-check_var_valid_value "base_case_name" "valid_vals_base_case_name"
+# Uncomment the following line if/when the line above that sets 
+# valid_vals_base_case_name is uncommented.
+#check_var_valid_value "base_case_name" "valid_vals_base_case_name"
 check_var_valid_value "base_suite_name" "valid_vals_base_suite_name"
 check_var_valid_value "do_deep_conv" "valid_vals_do_deep_conv"
 check_var_valid_value "do_shal_conv" "valid_vals_do_shal_conv"
