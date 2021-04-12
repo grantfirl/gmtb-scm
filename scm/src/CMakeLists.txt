@@ -342,5 +342,11 @@ add_custom_command(
 add_custom_command(
         TARGET gmtb_scm POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E create_symlink
+                ${PAS_DIR}/create_SCM_case_from_FV3LAM_fcst.sh
+                ${CMAKE_CURRENT_BINARY_DIR}/create_SCM_case_from_FV3LAM_fcst.sh)
+
+add_custom_command(
+        TARGET gmtb_scm POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E create_symlink
                 ${PAS_DIR}/run_test_set.sh
                 ${CMAKE_CURRENT_BINARY_DIR}/run_test_set.sh)
