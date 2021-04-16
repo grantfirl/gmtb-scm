@@ -299,6 +299,7 @@ lw_dn_sfc_tot = []
 lw_dn_sfc_clr = []
 rh = []
 rh_500 = []
+tcdc_aveclm = []
 
 inst_time_group = []
 diag_time_group = []
@@ -732,6 +733,14 @@ for i in range(len(gmtb_scm_datasets)):
     
     sfc_rad_net_ocean.append((sfc_dwn_sw[-1] - sfc_up_sw[-1]) + (sfc_dwn_lw[-1] - sfc_up_lw_ocean[-1]))
     inst_time_group.append('sfc_rad_net_ocean')
+    
+    try:
+        tcdc_aveclm.append(nc_fid.variables['tcdc_aveclm'][:])
+    except KeyError:
+        print('tcdc_aveclm not in the output file {0}'.format(gmtb_scm_datasets[i]))
+        print('Missing variables are replaced with {0}'.format(missing_value))
+        tcdc_aveclm.append(missing_value*np.ones((len(time_swrad[-1]))))
+    swrad_time_group.append('tcdc_aveclm')
     
     # sw_up_TOA_tot.append(nc_fid.variables['sw_up_TOA_tot'][:])
     # sw_dn_TOA_tot.append(nc_fid.variables['sw_dn_TOA_tot'][:])

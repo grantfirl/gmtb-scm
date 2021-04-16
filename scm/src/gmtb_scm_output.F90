@@ -93,7 +93,7 @@ subroutine output_init(scm_state, physics)
   CALL output_init_sfcprop(ncid, time_inst_id, hor_dim_id, vert_dim_soil_id, scm_state, physics)
   CALL output_init_interstitial(ncid, time_inst_id, hor_dim_id, vert_dim_id, vert_dim_rad_id)
   CALL output_init_radtend(ncid, time_swrad_id, time_lwrad_id, hor_dim_id, vert_dim_id)
-  CALL output_init_diag(ncid, time_inst_id, time_diag_id, hor_dim_id, vert_dim_id, physics)
+  CALL output_init_diag(ncid, time_inst_id, time_diag_id, time_swrad_id, hor_dim_id, vert_dim_id, physics)
   
   call NetCDF_def_var(ncid, 'init_year',   NF90_FLOAT, "model initialization year",   "year",   year_id)
   call NetCDF_def_var(ncid, 'init_month',  NF90_FLOAT, "model initialization month",  "month",  month_id)
@@ -259,11 +259,11 @@ subroutine output_init_radtend(ncid, time_swrad_id, time_lwrad_id, hor_dim_id, v
   
 end subroutine output_init_radtend
 
-subroutine output_init_diag(ncid, time_inst_id, time_diag_id, hor_dim_id, vert_dim_id, physics)
+subroutine output_init_diag(ncid, time_inst_id, time_diag_id, time_swrad_id, hor_dim_id, vert_dim_id, physics)
   use gmtb_scm_type_defs, only: physics_type
   use NetCDF_def, only : NetCDF_def_var
   
-  integer, intent(in) :: ncid, time_inst_id, time_diag_id, hor_dim_id, vert_dim_id
+  integer, intent(in) :: ncid, time_inst_id, time_diag_id, time_swrad_id, hor_dim_id, vert_dim_id
   type(physics_type), intent(in) :: physics
   
   integer :: i, dummy_id
@@ -332,6 +332,8 @@ subroutine output_init_diag(ncid, time_inst_id, time_diag_id, hor_dim_id, vert_d
   call NetCDF_def_var(ncid, 'graupel_rate_accum',   NF90_FLOAT, "cumulative surface liquid water equivalent thickness of graupel precipitation rate (valid over diagnostic interval)",    "m s-1", dummy_id, (/ hor_dim_id, time_diag_id /))
   call NetCDF_def_var(ncid, 'conv_prcp_rate_accum', NF90_FLOAT, "cumulative surface liquid water equivalent thickness of convective precipitation rate (valid over diagnostic interval)", "m s-1", dummy_id, (/ hor_dim_id, time_diag_id /))
   
+  call NetCDF_def_var(ncid, 'tcdc_aveclm',     NF90_FLOAT, "atmos column total cloud cover",                                             "%",     dummy_id, (/ hor_dim_id, time_swrad_id /))
+
   
   !all auxilliary diagnostics will be output every timestep (logic will need to be added to implement time averaging -- including resetting in GFS_typedefs/phys_diag_zero)
   if (physics%Model%naux2d > 0) then
@@ -392,6 +394,7 @@ subroutine output_append(scm_state, physics)
       CALL CHECK(NF90_PUT_VAR(NCID=ncid,VARID=var_id,VALUES=scm_state%model_time,START=(/ scm_state%itt_lwrad /)))
     end if
     call output_append_radtend(ncid, scm_state, physics)
+    call output_append_diag_swrad(ncid, scm_state, physics)
   end if
   call output_append_diag_inst(ncid, scm_state, physics)
   if(mod(scm_state%itt,physics%Model%nszero) == 0) then
@@ -686,6 +689,23 @@ subroutine output_append_diag_avg(ncid, scm_state, physics)
     call NetCDF_put_var(ncid, "conv_prcp_rate_accum", physics%Diag%cnvprcpb(:), scm_state%itt_diag, inverse_n_diag*inverse_dt)
     
 end subroutine output_append_diag_avg
+
+subroutine output_append_diag_swrad(ncid, scm_state, physics)
+    use gmtb_scm_type_defs, only: scm_state_type, physics_type
+    use NetCDF_put, only: NetCDF_put_var
+    
+    integer, intent(in) :: ncid
+    type(scm_state_type), intent(in) :: scm_state
+    type(physics_type), intent(in) :: physics
+    
+    real(kind=dp) :: inverse_n_swrad, inverse_dt
+    
+    inverse_n_swrad = 1.0/physics%Model%nsswr
+    inverse_dt = 1.0/scm_state%dt
+    
+    call NetCDF_put_var(ncid, "tcdc_aveclm", physics%Diag%fluxr(:,17)*100.0, scm_state%itt_swrad, inverse_n_swrad*inverse_dt)
+    
+end subroutine output_append_diag_swrad
 
 !> @}
 !> @}
