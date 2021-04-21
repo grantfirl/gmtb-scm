@@ -739,8 +739,8 @@ for i in range(len(gmtb_scm_datasets)):
     except KeyError:
         print('tcdc_aveclm not in the output file {0}'.format(gmtb_scm_datasets[i]))
         print('Missing variables are replaced with {0}'.format(missing_value))
-        tcdc_aveclm.append(missing_value*np.ones((len(time_swrad[-1]))))
-    swrad_time_group.append('tcdc_aveclm')
+        tcdc_aveclm.append(missing_value*np.ones((len(time_diag[-1]))))
+    diag_time_group.append('tcdc_aveclm')
     
     # sw_up_TOA_tot.append(nc_fid.variables['sw_up_TOA_tot'][:])
     # sw_dn_TOA_tot.append(nc_fid.variables['sw_dn_TOA_tot'][:])
