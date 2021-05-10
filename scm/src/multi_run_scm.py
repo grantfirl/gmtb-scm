@@ -16,6 +16,9 @@ RUN_SCRIPT = './run_scm.py'
 # number of realizations to time if timer is used
 timer_iterations = 1
 
+# error strings to check in the output
+ERROR_STRINGS = ['systemexit','sigsegv','backtrace']
+
 parser = argparse.ArgumentParser()
 group = parser.add_mutually_exclusive_group()#required=True)
 group.add_argument('-c', '--case',       help='name of case to run',)
@@ -62,19 +65,20 @@ def spawn_subprocess(command, timer):
 def subprocess_work(command):
     p = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
     (output, err) = p.communicate()
-    p_status = p.wait()
+    #p_status = p.wait()
     logging.debug(output)
     exit_code = p.returncode
     if not exit_code == 0:
         message = '####### The subprocess started using the command ({0}) exited with code {1}. #######\n'\
                   'Run the command ({0}) by itself again or use the -v or -vv options for more details.'.format(command, exit_code)
         logging.critical(message)
-    elif 'SystemExit' in str(output):
-        exit_code = str(output).split("SystemExit: ")[-1].split("\\n")[0].strip()
+    elif any(test_string in str(output) for test_string in ERROR_STRINGS):
+        #exit_code = str(output).split("SystemExit: ")[-1].split("\\n")[0].strip()
         message = '####### The subprocess started using the command ({0}) exited with a normal exit code, but\n'\
-        'the terminal output indicated that an error occurred ({1}). #######\n'\
-        'Run the command ({0}) by itself again or use the -v or -vv options for more details.'.format(command, exit_code)
+        'the terminal output indicated one of the following strings occured in the output: ({1}). #######\n'\
+        'Run the command ({0}) by itself again or use the -v or -vv options for more details.'.format(command, ERROR_STRINGS)
         logging.critical(message)
+        exit_code = -999 #unknown
     RESULTS.append([command, exit_code])
 
 def main():
